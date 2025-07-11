@@ -1,137 +1,150 @@
-# Luxafor Notification Monitor
+# Luxafor macOS Notification Monitor
 
-Automatically monitors Slack, Teams, Zoom, and Outlook for notifications and displays them on your Luxafor device.
+Automatically monitor Slack, Teams, Zoom, Outlook and other apps for notifications and display them on your Luxafor LED device.
 
-## Overview
+![SwiftBar Menu](https://img.shields.io/badge/SwiftBar-Compatible-green)
+![macOS](https://img.shields.io/badge/macOS-10.15%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-This system monitors dock badges on macOS and lights up your Luxafor device with different colors based on which apps have notifications. It runs automatically on login and can be controlled via the menu bar.
+## Features
 
-## Components
+- 🚦 **Automatic LED Control** - Changes Luxafor color based on app notifications
+- 📱 **Multi-App Support** - Monitor Slack, Teams, Zoom, Outlook, and more
+- 🎨 **Customizable Colors** - Assign any color to any app via config file
+- 📊 **Priority System** - Shows highest priority notification when multiple exist
+- 🖥️ **Menu Bar Control** - Start/stop monitoring and see notification counts
+- ⚡ **Lightweight** - Near-zero CPU usage, no logging overhead
+- 🔧 **Easy Configuration** - Simple text config file, no coding required
 
-### Core Scripts
+## Quick Start
 
-1. **`luxafor-notify.sh`** - Main monitoring script
-   - Polls app badges every 5 seconds
-   - Controls Luxafor LED colors based on notifications
-   - Runs silently with no logging
+```bash
+# Clone the repository
+git clone https://github.com/LCraddock/luxafor-macos-monitor.git
+cd luxafor-macos-monitor
 
-2. **`luxafor-control.sh`** - Manual control script
-   - Commands: `start`, `stop`, `restart`, `status`
-   - Alternative to launch agent for manual control
+# Run the installer
+./install.sh
+```
 
-3. **`luxafor-toggle.1s.sh`** - SwiftBar menu bar plugin
-   - Shows 🟢 when running, 🔴 when stopped
-   - Click to start/stop monitoring
+That's it! The monitor is now running and will start automatically on login.
 
-### Configuration Files
-
-4. **`com.luxafor.notify.plist`** - macOS Launch Agent
-   - Auto-starts the service on login
-   - Keeps it running (restarts if it crashes)
-
-5. **`setup-launch-agent.sh`** - Launch agent installer
-   - Commands: `install`, `uninstall`
+### What the installer does:
+- Installs dependencies (SwiftBar, hidapi, cmake)
+- Clones and builds the enhanced luxafor-cli from source
+- Sets up the monitor service and menu bar integration
+- Creates default configuration in `~/.luxafor-monitor/`
 
 ## How It Works
 
-1. The launch agent starts `luxafor-notify.sh` automatically on login
-2. The script checks notification badges using `lsappinfo` every 5 seconds
-3. For Outlook, it also checks all folders via AppleScript
-4. Based on priority, it sets the Luxafor to the appropriate color
-5. SwiftBar displays the status in the menu bar with a 🟢/🔴 indicator
-6. No logging - runs completely silent with minimal system impact
-
-## Color Assignments
-
-Priority order (highest to lowest):
-
-| App | Color | Priority | Notes |
-|-----|-------|----------|-------|
-| Teams | Red | 1 (Highest) | Company-wide communications |
-| Outlook | Blue | 2 | Checks all folders, not just inbox |
-| Slack | Green | 3 | Department communications |
-| Zoom | Magenta | 4 (Lowest) | Meeting notifications |
+1. Polls notification badges using macOS `lsappinfo` every 5 seconds
+2. For Outlook, also checks all folders (not just inbox)
+3. Sets Luxafor to the color of the highest priority app with notifications
+4. Menu bar icon shows status (🟢 running / 🔴 stopped)
 
 ## Configuration
 
-### Change Colors
-Edit `luxafor-notify.sh` lines 75-86:
+Edit `~/.luxafor-monitor/luxafor-config.conf` to customize:
+
 ```bash
-# Example: Change Teams from red to yellow
-$LUXAFOR_CLI red    # Change to: $LUXAFOR_CLI yellow
+# Format: AppName|BundleID|Color|Priority
+Teams|com.microsoft.teams2|red|1
+Outlook|com.microsoft.Outlook|blue|2
+Slack|com.tinyspeck.slackmacgap|green|3
+Zoom|us.zoom.xos|magenta|4
 ```
 
-### Change Poll Interval
-Edit `luxafor-notify.sh` line 8:
+After editing, restart via the menu bar or run:
 ```bash
-POLL_INTERVAL=5    # Change to desired seconds (default: 5)
+~/.luxafor-monitor/luxafor-control.sh restart
 ```
 
-### Change Priority Order
-Rearrange the if/elif blocks in `luxafor-notify.sh` (lines 75-90)
+### Finding Bundle IDs
 
-### Add/Remove Apps
-1. Find the app's bundle ID: `lsappinfo list | grep -i appname`
-2. Add a new badge check in the script
-3. Add a new color condition in the priority chain
-
-## Usage
-
-### Menu Bar Control (Recommended)
-- Click the 🟢/🔴 icon in the menu bar
-- Select "Start/Stop Monitoring"
-
-### Command Line Control
+To monitor additional apps:
 ```bash
-# Check status
-./luxafor-control.sh status
-
-# Manual start/stop
-./luxafor-control.sh start
-./luxafor-control.sh stop
-./luxafor-control.sh restart
+lsappinfo list | grep -i "app name"
 ```
 
-### Launch Agent Control
+### Available Colors
+
+Basic: `red`, `green`, `blue`, `yellow`, `magenta`, `cyan`, `orange`, `purple`, `pink`, `white`, `off`
+
+Hex: `0xFF00FF` or `#FF00FF`
+
+## Requirements
+
+- macOS 10.15 or later
+- Luxafor USB device
+- Apps must have "Badge app icon" enabled in System Settings → Notifications
+
+## Menu Bar Features
+
+Click the 🟢/🔴 icon to:
+- View current notification counts
+- Start/Stop monitoring
+- Edit configuration
+- Run LED tests
+- Set manual colors
+
+## Command Line Usage
+
 ```bash
-# Temporarily disable
-launchctl unload ~/Library/LaunchAgents/com.luxafor.notify.plist
+# Control the monitor
+~/.luxafor-monitor/luxafor-control.sh start|stop|restart|status
 
-# Re-enable
-launchctl load ~/Library/LaunchAgents/com.luxafor.notify.plist
+# Run LED test
+~/.luxafor-monitor/luxafor-test.sh
 
-# Permanently uninstall
-./setup-launch-agent.sh uninstall
+# Manual color control
+~/.luxafor-monitor/luxafor-cli/build/luxafor red
+```
+
+## Uninstall
+
+```bash
+cd luxafor-macos-monitor
+./uninstall.sh
 ```
 
 ## Troubleshooting
 
-### Luxafor not lighting up
-1. Check if monitoring is running: `./luxafor-control.sh status`
-2. Test luxafor directly: `/Users/larry.craddock/Projects/luxafor-cli/build/luxafor red`
-3. Run script manually to see output: `./luxafor-notify.sh`
+**Luxafor not lighting up?**
+- Check if monitoring is running (menu bar should show 🟢)
+- Ensure apps have badge notifications enabled in System Settings
+- Test LED directly: `~/.luxafor-monitor/luxafor-cli/build/luxafor red`
 
-### Apps not detected
-1. Make sure apps are in the Dock
-2. Check System Settings → Notifications → ensure "Badge app icon" is enabled
-3. For Teams: @mention yourself in a channel
-4. For Slack: Use `/remind me test in 1 minute`
-
-### Menu bar icon not appearing
-1. Make sure SwiftBar is running
-2. Check plugin folder is set to `~/Documents/SwiftBarPlugins`
-3. Click SwiftBar → Refresh All
+**Apps not detected?**
+- Apps must be in the Dock
+- For Teams: @mention yourself in a channel
+- For Slack: Use `/remind me test in 1 minute`
 
 ## Dependencies
 
-- **luxafor-cli**: Located at `~/Projects/luxafor-cli/build/luxafor`
-- **SwiftBar**: For menu bar control (`brew install --cask swiftbar`)
-- **macOS**: Requires macOS for AppleScript and launch agents
+This project uses:
+- [Enhanced luxafor-cli](https://github.com/LCraddock/luxafor-cli) - Fork of [Mike Rogers' luxafor-cli](https://github.com/mike-rogers/luxafor-cli) with added color and effect support
+- [SwiftBar](https://github.com/swiftbar/SwiftBar) - For menu bar functionality
 
-## Files Location
+The installer automatically builds the enhanced luxafor-cli from source, so you don't need to install it separately.
 
-All files are in `/Users/larry.craddock/Projects/luxafor/`:
-- Main scripts: `luxafor-notify.sh`, `luxafor-control.sh`
-- Menu bar plugin: `luxafor-toggle.1s.sh`
-- Launch agent: `com.luxafor.notify.plist`
-- No log files - runs silently
+## License
+
+MIT License - See LICENSE file for details
+
+## Contributing
+
+Pull requests welcome! Please test changes with your Luxafor device before submitting.
+
+### Development Setup
+
+1. Fork and clone the repository
+2. Make your changes
+3. Test with `./install.sh` (it will update existing installation)
+4. Submit a pull request
+
+## TODO
+
+- [ ] Support for multiple Luxafor devices
+- [ ] Different effects for different priority levels
+- [ ] DND mode scheduling
+- [ ] Support for Luxafor Flag vs Orb differences
