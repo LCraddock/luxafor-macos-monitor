@@ -74,14 +74,42 @@ fi
 echo
 echo "Building luxafor-cli (enhanced version)..."
 if [ ! -d "$INSTALL_DIR/luxafor-cli" ]; then
+    echo "Cloning enhanced luxafor-cli..."
     git clone --recurse-submodules https://github.com/LCraddock/luxafor-cli.git "$INSTALL_DIR/luxafor-cli"
+else
+    echo "Using existing luxafor-cli source"
 fi
 
 cd "$INSTALL_DIR/luxafor-cli"
+
+# Clean previous build if exists
+if [ -d "build" ]; then
+    echo "Cleaning previous build..."
+    rm -rf build
+fi
+
 mkdir -p build
 cd build
-cmake ..
-cmake --build .
+
+echo "Configuring build..."
+cmake .. || {
+    echo "❌ CMake configuration failed"
+    exit 1
+}
+
+echo "Building luxafor executable..."
+cmake --build . || {
+    echo "❌ Build failed"
+    exit 1
+}
+
+# Verify the binary was created
+if [ ! -f "luxafor" ]; then
+    echo "❌ Build completed but luxafor binary not found"
+    exit 1
+fi
+
+echo "✅ luxafor-cli built successfully"
 cd "$INSTALL_DIR"
 
 # Update paths in scripts
