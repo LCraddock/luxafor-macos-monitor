@@ -13,9 +13,14 @@ SCRIPT_DIR="/Users/larry.craddock/Projects/luxafor"
 get_badge_lsappinfo() {
   local bundle_id="$1"
   local status_info=$(lsappinfo info -only StatusLabel "$bundle_id" 2>/dev/null)
+  
+  # Check for numeric badge
   local badge_count=$(echo "$status_info" | grep -o '"label"="[0-9]*"' | cut -d'"' -f4)
   
-  if [[ -z "$badge_count" ]] || [[ "$status_info" == *"kCFNULL"* ]]; then
+  # Check for bullet point (Slack uses this for notifications)
+  if [[ "$status_info" == *'"label"="•"'* ]]; then
+    echo "1"  # Return 1 if bullet is present
+  elif [[ -z "$badge_count" ]] || [[ "$status_info" == *"kCFNULL"* ]]; then
     echo "0"
   else
     echo "$badge_count"
