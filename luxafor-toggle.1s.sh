@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+#
+# luxafor-toggle.1s.sh
+# SwiftBar/BitBar plugin for Luxafor notification control
+# The "1s" in the filename means it refreshes every 1 second
+#
+
+PLIST_NAME="com.luxafor.notify"
+PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
+SCRIPT_DIR="/Users/larry.craddock/Projects/luxafor"
+
+# Get badge count using lsappinfo
+get_badge_lsappinfo() {
+  local bundle_id="$1"
+  local status_info=$(lsappinfo info -only StatusLabel "$bundle_id" 2>/dev/null)
+  local badge_count=$(echo "$status_info" | grep -o '"label"="[0-9]*"' | cut -d'"' -f4)
+  
+  if [[ -z "$badge_count" ]] || [[ "$status_info" == *"kCFNULL"* ]]; then
+    echo "0"
+  else
+    echo "$badge_count"
+  fi
+}
+
+# Get Outlook unread count from ALL folders
+get_outlook_unread_total() {
+  local count=$(osascript <<'APPLESCRIPT' 2>/dev/null
+tell application "Microsoft Outlook"
+    try
+        set totalUnread to 0
+        set defaultAcct to default account
+        
+        repeat with eachFolder in (get mail folders of defaultAcct)
+            set totalUnread to totalUnread + (unread count of eachFolder)
+        end repeat
+        
+        return totalUnread as integer
+        
+    on error
+        return 0
+    end try
+end tell
+APPLESCRIPT
+)
+  
+  if [[ "$count" =~ ^[0-9]+$ ]]; then
+    echo "$count"
+  else
+    echo "0"
+  fi
+}
+
+# Check if the service is running
+if launchctl list | grep -q "$PLIST_NAME"; then
+    STATUS="running"
+    ICON="🟢"  # Green circle when running
+else
+    STATUS="stopped"
+    ICON="🔴"  # Red circle when stopped
+fi
+
+# Menu bar display
+echo "$ICON"
+echo "---"
+
+# Menu items
+if [ "$STATUS" = "running" ]; then
+    echo "Luxafor Monitor: Running | color=green"
+    echo "Stop Monitoring | bash='launchctl' param1=unload param2='$PLIST_PATH' terminal=false refresh=true"
+    
+    # Show current notification counts
+    echo "---"
+    echo "Current Notifications:"
+    
+    # Read config and get badge counts
+    CONFIG_FILE="$SCRIPT_DIR/luxafor-config.conf"
+    
+    # Arrays to store config
+    declare -a APP_NAMES
+    declare -a BUNDLE_IDS  
+    declare -a COLORS
+    declare -a PRIORITIES
+    
+    # Read config file
+    local index=0
+    while IFS='|' read -r name bundle color priority || [ -n "$name" ]; do
+        # Skip comments and empty lines
+        [[ "$name" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$name" ]] && continue
+        
+        # Trim whitespace
+        name=$(echo "$name" | xargs)
+        bundle=$(echo "$bundle" | xargs)
+        color=$(echo "$color" | xargs)
+        priority=$(echo "$priority" | xargs)
+        
+        # Store in arrays
+        APP_NAMES[$index]="$name"
+        BUNDLE_IDS[$index]="$bundle"
+        COLORS[$index]="$color"
+        PRIORITIES[$index]="$priority"
+        
+        ((index++))
+    done < "$CONFIG_FILE"
+    
+    # Check each app and display if it has notifications
+    has_notifications=false
+    for i in "${!APP_NAMES[@]}"; do
+        app_name="${APP_NAMES[$i]}"
+        bundle_id="${BUNDLE_IDS[$i]}"
+        color="${COLORS[$i]}"
+        
+        # Get badge count
+        badge_count=$(get_badge_lsappinfo "$bundle_id")
+        
+        # Special handling for Outlook
+        if [[ "$app_name" == "Outlook" ]]; then
+            outlook_total=$(get_outlook_unread_total)
+            if [[ "$outlook_total" -gt "$badge_count" ]]; then
+                badge_count=$outlook_total
+                note=" (all folders)"
+            else
+                note=""
+            fi
+        else
+            note=""
+        fi
+        
+        # Display if has notifications
+        if [[ "$badge_count" -gt 0 ]]; then
+            echo "$app_name: $badge_count$note | color=$color size=12"
+            has_notifications=true
+        fi
+    done
+    
+    # If no notifications
+    if [[ "$has_notifications" == "false" ]]; then
+        echo "No notifications | color=gray size=12"
+    fi
+    
+else
+    echo "Luxafor Monitor: Stopped | color=red"
+    echo "Start Monitoring | bash='launchctl' param1=load param2='$PLIST_PATH' terminal=false refresh=true"
+fi
+
+echo "---"
+echo "Edit Config | bash='open' param1='-a' param2='TextEdit' param3='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
+echo "Restart Monitor | bash='$SCRIPT_DIR/luxafor-control.sh' param1='restart' terminal=true"
+echo "---"
+echo "Quick LED Test (6s) | bash='$SCRIPT_DIR/luxafor-quick-test.sh' terminal=false"
+echo "Full LED Test (30s) | bash='$SCRIPT_DIR/luxafor-test.sh' terminal=true"
+echo "---"
+echo "Manual Colors: (⌥-click to keep menu open)"
+echo "  Red | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='red' terminal=false"
+echo "  Green | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='green' terminal=false"
+echo "  Blue | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='blue' terminal=false"
+echo "  Off | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='off' terminal=false"
+echo "---"
+echo "Open Folder | bash='open' param1='$SCRIPT_DIR' terminal=false"

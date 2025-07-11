@@ -1,0 +1,15 @@
+# Build artifacts
+luxafor-cli/build/
+*.o
+*.a
+
+# Runtime files
+.luxafor-notify.pid
+luxafor-notify.log
+*.log
+
+# macOS
+.DS_Store
+
+# User-specific configs (optional - remove if you want to track config)
+# luxafor-config.conf
