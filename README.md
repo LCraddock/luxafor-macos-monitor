@@ -142,6 +142,16 @@ Pull requests welcome! Please test changes with your Luxafor device before submi
 3. Test with `./install.sh` (it will update existing installation)
 4. Submit a pull request
 
+### Note on File Paths
+
+This repository contains full absolute paths (e.g., `/Users/larry.craddock/Projects/luxafor/`) rather than using `$HOME` or relative paths. This is intentional because:
+
+- **plist files** (Launch Agents) require absolute paths and don't expand environment variables
+- **AppleScript** doesn't understand shell variables like `$HOME`
+- **SwiftBar** menu actions need absolute paths in their parameters
+
+The installer script (`install.sh`) automatically updates all paths to match your system during installation, so these hardcoded paths won't affect end users.
+
 ## TODO
 
 - [ ] Support for multiple Luxafor devices
