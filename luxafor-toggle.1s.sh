@@ -55,13 +55,31 @@ APPLESCRIPT
   fi
 }
 
+# Check if Luxafor device is connected
+check_luxafor_device() {
+    # Check for Luxafor device in USB system profile without affecting LED state
+    if system_profiler SPUSBDataType 2>/dev/null | grep -qi "luxafor"; then
+        return 0  # Device connected
+    else
+        return 1  # Device not connected
+    fi
+}
+
 # Check if the service is running
 if launchctl list | grep -q "$PLIST_NAME"; then
     STATUS="running"
-    ICON="🟢"  # Green circle when running
+    # Check if device is connected
+    if check_luxafor_device; then
+        ICON="🟢"  # Green circle when running and device connected
+        DEVICE_STATUS="connected"
+    else
+        ICON="🟠"  # Amber/orange circle when running but device not connected
+        DEVICE_STATUS="disconnected"
+    fi
 else
     STATUS="stopped"
     ICON="🔴"  # Red circle when stopped
+    DEVICE_STATUS="unknown"
 fi
 
 # Menu bar display
@@ -70,7 +88,11 @@ echo "---"
 
 # Menu items
 if [ "$STATUS" = "running" ]; then
-    echo "Luxafor Monitor: Running | color=green"
+    if [ "$DEVICE_STATUS" = "connected" ]; then
+        echo "Luxafor Monitor: Running | color=green"
+    else
+        echo "Luxafor Monitor: Running (No Device) | color=orange"
+    fi
     echo "Stop Monitoring | bash='$SCRIPT_DIR/luxafor-control.sh' param1='stop' terminal=false refresh=true"
     
     # Show current notification counts

@@ -54,7 +54,7 @@ status() {
 
 restart() {
     stop
-    sleep 1
+    sleep 2  # Give more time for processes to fully terminate
     start
 }
 
