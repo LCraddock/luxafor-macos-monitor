@@ -25,23 +25,18 @@ start() {
 }
 
 stop() {
-    if [ ! -f "$PID_FILE" ]; then
-        echo "Luxafor notify is not running"
-        return 1
+    # Kill any running instances first
+    pkill -f "luxafor-notify.sh" 2>/dev/null || true
+    
+    # Clean up PID file
+    if [ -f "$PID_FILE" ]; then
+        rm -f "$PID_FILE"
     fi
     
-    PID=$(cat "$PID_FILE")
-    if ps -p "$PID" > /dev/null 2>&1; then
-        echo "Stopping Luxafor notify (PID: $PID)..."
-        kill "$PID"
-        rm -f "$PID_FILE"
-        # Turn off the light
-        "$SCRIPT_DIR/../luxafor-cli/build/luxafor" off 2>/dev/null || true
-        echo "Stopped"
-    else
-        echo "Process not found. Cleaning up..."
-        rm -f "$PID_FILE"
-    fi
+    # Turn off the light
+    "$SCRIPT_DIR/../luxafor-cli/build/luxafor" off 2>/dev/null || true
+    
+    echo "Luxafor notify stopped"
 }
 
 status() {

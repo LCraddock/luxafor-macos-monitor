@@ -71,7 +71,7 @@ echo "---"
 # Menu items
 if [ "$STATUS" = "running" ]; then
     echo "Luxafor Monitor: Running | color=green"
-    echo "Stop Monitoring | bash='launchctl' param1=unload param2='$PLIST_PATH' terminal=false refresh=true"
+    echo "Stop Monitoring | bash='$SCRIPT_DIR/luxafor-control.sh' param1='stop' terminal=false refresh=true"
     
     # Show current notification counts
     echo "---"
@@ -149,7 +149,8 @@ else
 fi
 
 echo "---"
-echo "Edit Config | bash='open' param1='-a' param2='TextEdit' param3='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
+echo "Edit Config | bash='code' param1='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
+echo "Edit Burp Flash | bash='code' param1='$SCRIPT_DIR/luxafor-burp-flash.sh' terminal=false"
 echo "Restart Monitor | bash='$SCRIPT_DIR/luxafor-control.sh' param1='restart' terminal=true"
 echo "---"
 echo "Quick LED Test (6s) | bash='$SCRIPT_DIR/luxafor-quick-test.sh' terminal=false"
