@@ -143,6 +143,28 @@ if [ "$STATUS" = "running" ]; then
         echo "No notifications | color=gray size=12"
     fi
     
+    # Show enable/disable toggles
+    echo "---"
+    echo "Enabled Apps:"
+    
+    # Read enabled state for each app from main config
+    while IFS='|' read -r name bundle color priority || [ -n "$name" ]; do
+        # Skip comments and empty lines
+        [[ "$name" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$name" ]] && continue
+        
+        # Trim whitespace
+        name=$(echo "$name" | xargs)
+        color=$(echo "$color" | xargs)
+        
+        # Check if enabled
+        if grep -q "^${name}|disabled" "$SCRIPT_DIR/luxafor-enabled-apps.conf" 2>/dev/null; then
+            echo "☐ $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='enable' terminal=false refresh=true color=$color"
+        else
+            echo "☑ $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='disable' terminal=false refresh=true color=$color"
+        fi
+    done < "$CONFIG_FILE"
+    
 else
     echo "Luxafor Monitor: Stopped | color=red"
     echo "Start Monitoring | bash='launchctl' param1=load param2='$PLIST_PATH' terminal=false refresh=true"

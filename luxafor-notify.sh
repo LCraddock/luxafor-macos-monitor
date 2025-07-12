@@ -88,6 +88,24 @@ APPLESCRIPT
 # Load configuration
 load_config
 
+# Check if app is enabled
+is_app_enabled() {
+    local app_name="$1"
+    local enabled_file="/Users/larry.craddock/Projects/luxafor/luxafor-enabled-apps.conf"
+    
+    # Default to enabled if file doesn't exist
+    if [ ! -f "$enabled_file" ]; then
+        return 0
+    fi
+    
+    # Check if app is explicitly disabled
+    if grep -q "^${app_name}|disabled" "$enabled_file" 2>/dev/null; then
+        return 1
+    fi
+    
+    return 0
+}
+
 while true; do
   # Find highest priority app with notifications
   highest_priority=999
@@ -110,8 +128,8 @@ while true; do
       fi
     fi
     
-    # Check if this app has notifications and higher priority
-    if [[ "$badge_count" -gt 0 ]] && [[ "$priority" -lt "$highest_priority" ]]; then
+    # Check if this app is enabled and has notifications and higher priority
+    if is_app_enabled "$app_name" && [[ "$badge_count" -gt 0 ]] && [[ "$priority" -lt "$highest_priority" ]]; then
       highest_priority=$priority
       selected_color=$color
     fi
