@@ -16,6 +16,17 @@ Automatically monitor Slack, Teams, Zoom, Outlook and other apps for notificatio
 - ⚡ **Lightweight** - Near-zero CPU usage, no logging overhead
 - 🔧 **Easy Configuration** - Simple text config file, no coding required
 
+## SwiftBar Menu
+
+![SwiftBar Menu Screenshot](macafor.png)
+
+The SwiftBar menu provides complete control over the Luxafor monitor:
+- View current notification counts for all monitored apps
+- Enable/disable notifications for individual apps
+- Quick LED tests and manual color controls
+- Easy access to configuration files
+- Device connection status indicator
+
 ## Quick Start
 
 ```bash
