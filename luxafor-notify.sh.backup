@@ -18,7 +18,6 @@ LUXAFOR_CLI="/Users/larry.craddock/Projects/luxafor-cli/build/luxafor"
 CONFIG_FILE="/Users/larry.craddock/Projects/luxafor/luxafor-config.conf"
 OUTLOOK_FOLDERS_CONFIG="/Users/larry.craddock/Projects/luxafor/luxafor-outlook-folders.conf"
 PUSHOVER_CONFIG="/Users/larry.craddock/Projects/luxafor/luxafor-pushover.conf"
-CHANNELS_CONFIG="/Users/larry.craddock/Projects/luxafor/luxafor-channels.conf"
 
 
 # Arrays to store config
@@ -26,16 +25,6 @@ declare -a APP_NAMES
 declare -a BUNDLE_IDS
 declare -a COLORS
 declare -a PRIORITIES
-
-# Arrays to store channel config
-declare -a CHANNEL_APPS
-declare -a CHANNEL_TYPES
-declare -a CHANNEL_NAMES
-declare -a CHANNEL_COLORS
-declare -a CHANNEL_ACTIONS
-declare -a CHANNEL_PRIORITIES
-declare -a CHANNEL_SOUNDS
-declare -a CHANNEL_ENABLED
 
 # Read config file
 load_config() {
@@ -59,44 +48,6 @@ load_config() {
         
         ((index++))
     done < "$CONFIG_FILE"
-}
-
-# Read channel config file
-load_channel_config() {
-    if [ ! -f "$CHANNELS_CONFIG" ]; then
-        debug_log "No channels config found, skipping"
-        return
-    fi
-    
-    local index=0
-    while IFS='|' read -r app type name color action priority sound enabled || [ -n "$app" ]; do
-        # Skip comments and empty lines
-        [[ "$app" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "$app" ]] && continue
-        
-        # Trim whitespace
-        app=$(echo "$app" | xargs)
-        type=$(echo "$type" | xargs)
-        name=$(echo "$name" | xargs)
-        color=$(echo "$color" | xargs)
-        action=$(echo "$action" | xargs)
-        priority=$(echo "$priority" | xargs)
-        sound=$(echo "$sound" | xargs)
-        enabled=$(echo "$enabled" | xargs)
-        
-        # Store in arrays
-        CHANNEL_APPS[$index]="$app"
-        CHANNEL_TYPES[$index]="$type"
-        CHANNEL_NAMES[$index]="$name"
-        CHANNEL_COLORS[$index]="$color"
-        CHANNEL_ACTIONS[$index]="$action"
-        CHANNEL_PRIORITIES[$index]="$priority"
-        CHANNEL_SOUNDS[$index]="$sound"
-        CHANNEL_ENABLED[$index]="$enabled"
-        
-        debug_log "Loaded channel: $app/$type/$name"
-        ((index++))
-    done < "$CHANNELS_CONFIG"
 }
 
 # Get badge count using lsappinfo
@@ -184,7 +135,6 @@ APPLESCRIPT
 
 # Load configuration
 load_config
-load_channel_config
 
 # Track previous LED state
 previous_color="off"
@@ -229,25 +179,13 @@ send_pushover() {
     fi
     
     # Send the notification
-    debug_log "Sending Pushover: app=$app_name, msg=$message, pri=$priority, snd=$sound"
-    
-    # Build curl command with base parameters
-    curl_cmd="curl -s -X POST https://api.pushover.net/1/messages.json"
-    curl_cmd="$curl_cmd -d 'token=$PUSHOVER_APP_TOKEN'"
-    curl_cmd="$curl_cmd -d 'user=$PUSHOVER_USER_KEY'"
-    curl_cmd="$curl_cmd -d 'title=Luxafor: $app_name'"
-    curl_cmd="$curl_cmd -d 'message=$message'"
-    curl_cmd="$curl_cmd -d 'priority=$priority'"
-    curl_cmd="$curl_cmd -d 'sound=$sound'"
-    
-    # Add expire and retry for emergency priority
-    if [[ "$priority" == "2" ]]; then
-        curl_cmd="$curl_cmd -d 'expire=3600'"  # 1 hour
-        curl_cmd="$curl_cmd -d 'retry=60'"     # retry every minute
-    fi
-    
-    response=$(eval $curl_cmd 2>&1)
-    debug_log "Pushover response: $response"
+    curl -s -X POST https://api.pushover.net/1/messages.json \
+        -d "token=$PUSHOVER_APP_TOKEN" \
+        -d "user=$PUSHOVER_USER_KEY" \
+        -d "title=Luxafor: $app_name" \
+        -d "message=$message" \
+        -d "priority=$priority" \
+        -d "sound=$sound" >/dev/null 2>&1
 }
 
 
@@ -258,8 +196,6 @@ while true; do
   special_folder_action=""
   special_folder_color=""
   outlook_has_special=false
-  outlook_pushover_priority="0"
-  outlook_pushover_sound="pushover"
   
   for i in "${!APP_NAMES[@]}"; do
     app_name="${APP_NAMES[$i]}"
@@ -277,53 +213,27 @@ while true; do
         badge_count=$outlook_total
       fi
       
-      # Check special folders - try new config first, then old
-      if is_app_enabled "$app_name"; then
-        # First check new channels config
-        found_in_channels=false
-        for i in "${!CHANNEL_APPS[@]}"; do
-          if [[ "${CHANNEL_APPS[$i]}" == "Outlook" ]] && \
-             [[ "${CHANNEL_TYPES[$i]}" == "folder" ]] && \
-             [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
-            
-            folder_name="${CHANNEL_NAMES[$i]}"
-            folder_count=$(check_outlook_special_folder "$folder_name")
-            
-            if [[ "$folder_count" -gt 0 ]]; then
-              outlook_has_special=true
-              special_folder_color="${CHANNEL_COLORS[$i]}"
-              special_folder_action="${CHANNEL_ACTIONS[$i]}"
-              outlook_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
-              outlook_pushover_sound="${CHANNEL_SOUNDS[$i]}"
-              found_in_channels=true
-              debug_log "Found mail in channel config folder: $folder_name"
-              break
-            fi
+      # Check special folders if Outlook is enabled
+      if is_app_enabled "$app_name" && [ -f "$OUTLOOK_FOLDERS_CONFIG" ]; then
+        while IFS='|' read -r folder folder_color action || [ -n "$folder" ]; do
+          # Skip comments and empty lines
+          [[ "$folder" =~ ^[[:space:]]*# ]] && continue
+          [[ -z "$folder" ]] && continue
+          
+          # Trim whitespace
+          folder=$(echo "$folder" | xargs)
+          folder_color=$(echo "$folder_color" | xargs)
+          action=$(echo "$action" | xargs)
+          
+          # Check if this folder has unread emails
+          folder_count=$(check_outlook_special_folder "$folder")
+          if [[ "$folder_count" -gt 0 ]]; then
+            outlook_has_special=true
+            special_folder_color="$folder_color"
+            special_folder_action="$action"
+            break  # Use first matching special folder
           fi
-        done
-        
-        # Fall back to old config if not found in channels
-        if [[ "$found_in_channels" == "false" ]] && [ -f "$OUTLOOK_FOLDERS_CONFIG" ]; then
-          while IFS='|' read -r folder folder_color action || [ -n "$folder" ]; do
-            # Skip comments and empty lines
-            [[ "$folder" =~ ^[[:space:]]*# ]] && continue
-            [[ -z "$folder" ]] && continue
-            
-            # Trim whitespace
-            folder=$(echo "$folder" | xargs)
-            folder_color=$(echo "$folder_color" | xargs)
-            action=$(echo "$action" | xargs)
-            
-            # Check if this folder has unread emails
-            folder_count=$(check_outlook_special_folder "$folder")
-            if [[ "$folder_count" -gt 0 ]]; then
-              outlook_has_special=true
-              special_folder_color="$folder_color"
-              special_folder_action="$action"
-              break  # Use first matching special folder
-            fi
-          done < "$OUTLOOK_FOLDERS_CONFIG"
-        fi
+        done < "$OUTLOOK_FOLDERS_CONFIG"
       fi
     fi
     
@@ -355,23 +265,7 @@ while true; do
     # Send simple Pushover notification
     if [[ -n "$winning_app" ]]; then
       debug_log "Sending Pushover for $winning_app (transition from off to $selected_color)"
-      
-      # Use channel-specific settings if available
-      push_priority="0"
-      push_sound="pushover"
-      
-      if [[ "$winning_app" == "Outlook" ]] && [[ "$outlook_has_special" == "true" ]]; then
-        push_priority="$outlook_pushover_priority"
-        push_sound="$outlook_pushover_sound"
-      fi
-      
-      # Don't send if sound is "none"
-      if [[ "$push_sound" != "none" ]]; then
-        debug_log "Pushover settings: priority=$push_priority, sound=$push_sound"
-        send_pushover "$winning_app" "$winning_app notification" "$push_priority" "$push_sound"
-      else
-        debug_log "Skipping Pushover - sound is 'none'"
-      fi
+      send_pushover "$winning_app" "$winning_app notification" "0" "pushover"
     fi
   fi
   
