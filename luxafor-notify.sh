@@ -182,6 +182,43 @@ APPLESCRIPT
   fi
 }
 
+# Get current Teams channel/chat name
+get_teams_current_channel() {
+    local window_title=$(osascript -e 'tell application "System Events" to tell process "Microsoft Teams" to name of window 1' 2>/dev/null)
+    
+    if [[ -z "$window_title" ]]; then
+        echo ""
+        return
+    fi
+    
+    # Parse the window title
+    # Format: "Type | Channel/Chat Name | Microsoft Teams"
+    if [[ "$window_title" == *" | "* ]]; then
+        # Extract the middle part (channel/chat name)
+        local after_first="${window_title#* | }"
+        local channel_name="${after_first% | *}"
+        echo "$channel_name"
+    else
+        echo ""
+    fi
+}
+
+# Check if Teams name is a configured channel
+is_teams_configured_channel() {
+    local channel_name="$1"
+    
+    # Check if this name matches any configured Teams channels
+    for i in "${!CHANNEL_APPS[@]}"; do
+        if [[ "${CHANNEL_APPS[$i]}" == "Teams" ]] && \
+           [[ "${CHANNEL_TYPES[$i]}" == "channel" ]] && \
+           [[ "${CHANNEL_NAMES[$i]}" == "$channel_name" ]]; then
+            return 0  # Found it
+        fi
+    done
+    
+    return 1  # Not found
+}
+
 # Load configuration
 load_config
 load_channel_config
@@ -328,6 +365,75 @@ while true; do
       fi
     fi
     
+    # Special handling for Teams - check current channel/chat
+    if [[ "$app_name" == "Teams" ]]; then
+      teams_current_channel=""
+      teams_has_special=false
+      teams_special_color=""
+      teams_special_action=""
+      teams_pushover_priority="0"
+      teams_pushover_sound="pushover"
+      
+      # Get current Teams channel/chat name
+      if [[ "$badge_count" -gt 0 ]] && is_app_enabled "$app_name"; then
+        teams_current_channel=$(get_teams_current_channel)
+        
+        if [[ -n "$teams_current_channel" ]]; then
+          # Check if this is a configured channel
+          if is_teams_configured_channel "$teams_current_channel"; then
+            # This is a configured channel - check if it's enabled
+            for i in "${!CHANNEL_APPS[@]}"; do
+              if [[ "${CHANNEL_APPS[$i]}" == "Teams" ]] && \
+                 [[ "${CHANNEL_TYPES[$i]}" == "channel" ]] && \
+                 [[ "${CHANNEL_NAMES[$i]}" == "$teams_current_channel" ]] && \
+                 [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
+                
+                # Channel is enabled - use its settings
+                teams_has_special=true
+                teams_special_color="${CHANNEL_COLORS[$i]}"
+                teams_special_action="${CHANNEL_ACTIONS[$i]}"
+                teams_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
+                teams_pushover_sound="${CHANNEL_SOUNDS[$i]}"
+                debug_log "Found Teams channel notification: $teams_current_channel"
+                break
+              fi
+            done
+            
+            # If channel is not enabled, don't alert
+            if [[ "$teams_has_special" == "false" ]]; then
+              badge_count=0
+              debug_log "Teams channel disabled: $teams_current_channel"
+            fi
+          else
+            # This is NOT a configured channel - assume it's a chat
+            # Check if all chats are enabled
+            for i in "${!CHANNEL_APPS[@]}"; do
+              if [[ "${CHANNEL_APPS[$i]}" == "Teams" ]] && \
+                 [[ "${CHANNEL_TYPES[$i]}" == "chat" ]] && \
+                 [[ "${CHANNEL_NAMES[$i]}" == "_all_chats" ]] && \
+                 [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
+                
+                # All chats are enabled - use chat settings
+                teams_has_special=true
+                teams_special_color="${CHANNEL_COLORS[$i]}"
+                teams_special_action="${CHANNEL_ACTIONS[$i]}"
+                teams_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
+                teams_pushover_sound="${CHANNEL_SOUNDS[$i]}"
+                debug_log "Found Teams chat notification: $teams_current_channel"
+                break
+              fi
+            done
+            
+            # If all chats are disabled, don't alert
+            if [[ "$teams_has_special" == "false" ]]; then
+              badge_count=0
+              debug_log "Teams chats disabled: $teams_current_channel"
+            fi
+          fi
+        fi
+      fi
+    fi
+    
     # Check if this app is enabled and has notifications and higher priority
     if is_app_enabled "$app_name" && [[ "$badge_count" -gt 0 ]] && [[ "$priority" -lt "$highest_priority" ]]; then
         highest_priority=$priority
@@ -336,6 +442,11 @@ while true; do
         # If this is Outlook with special folder, override color/action
         if [[ "$app_name" == "Outlook" ]] && [[ "$outlook_has_special" == "true" ]]; then
           selected_color=$special_folder_color
+        fi
+        
+        # If this is Teams with special channel/chat, override color/action
+        if [[ "$app_name" == "Teams" ]] && [[ "$teams_has_special" == "true" ]]; then
+          selected_color=$teams_special_color
         fi
     fi
   done
@@ -366,6 +477,11 @@ while true; do
         push_sound="$outlook_pushover_sound"
       fi
       
+      if [[ "$winning_app" == "Teams" ]] && [[ "$teams_has_special" == "true" ]]; then
+        push_priority="$teams_pushover_priority"
+        push_sound="$teams_pushover_sound"
+      fi
+      
       # Don't send if sound is "none"
       if [[ "$push_sound" != "none" ]]; then
         debug_log "Pushover settings: priority=$push_priority, sound=$push_sound"
@@ -386,10 +502,23 @@ while true; do
   if [[ "$winning_app" == "Outlook" ]] && [[ -n "$outlook_special_folder" ]]; then
     echo "folder=$outlook_special_folder" >> "$state_file"
   fi
+  if [[ "$winning_app" == "Teams" ]] && [[ -n "$teams_current_channel" ]]; then
+    echo "channel=$teams_current_channel" >> "$state_file"
+  fi
   
   # Handle LED based on whether we need to flash or not
-  if [[ "$outlook_has_special" == "true" ]] && [[ "$special_folder_action" == "flash" ]] && [[ "$highest_priority" -eq 2 ]]; then
-    # Flash mode for special Outlook folders
+  should_flash=false
+  
+  if [[ "$outlook_has_special" == "true" ]] && [[ "$special_folder_action" == "flash" ]]; then
+    should_flash=true
+  fi
+  
+  if [[ "$teams_has_special" == "true" ]] && [[ "$teams_special_action" == "flash" ]]; then
+    should_flash=true
+  fi
+  
+  if [[ "$should_flash" == "true" ]]; then
+    # Flash mode for special channels/folders
     $LUXAFOR_CLI $selected_color >/dev/null 2>&1
     sleep 0.5
     $LUXAFOR_CLI off >/dev/null 2>&1

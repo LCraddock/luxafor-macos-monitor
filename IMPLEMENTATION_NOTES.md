@@ -1,99 +1,86 @@
-# Channel Monitoring Implementation Notes
+# Implementation Notes
 
-## Current Status
-- **Branch**: feature/channel-monitoring
-- **Started**: 2025-07-15
-- **Goal**: Add channel/folder specific monitoring without breaking existing functionality
+## Channel-Specific Monitoring
 
-## Implementation Progress
+### Completed Features
 
-### Phase 1: Unified Config System (Current)
+1. **Outlook Folder-Specific Monitoring** ✓
+   - Migrated from old config to unified `luxafor-channels.conf`
+   - Each folder has individual color, flash mode, and Pushover settings
+   - SwiftBar submenus with individual folder toggles
+   - Removed "all folders" fallback - ONLY alerts on configured folders
+   - Fixed all issues: Pushover priority 2, duplicate processes, config corruption
 
-#### Step 1.1: Design New Config Format ✅
-**Decision**: Create a new file `luxafor-channels.conf` that complements existing configs
-- Keeps backward compatibility
-- Apps without channels continue using main config
-- Channel config overrides app-level settings when matched
+### In Progress
 
-**Format**:
+2. **Teams Channel Detection**
+   - Window title format: `Type | Channel/Chat Name | Microsoft Teams`
+   - Can extract channel/chat name from window title
+   - Strategy:
+     - All chats/DMs alert by default
+     - Channels only alert if explicitly configured
+   - Config format:
+     ```
+     Teams|chat|_all_chats|blue|solid|0|pushover|true
+     Teams|channel|Security Alerts|red|flash|2|siren|true
+     ```
+
+### Planned
+
+3. **Slack Channel Detection**
+   - Similar approach to Teams
+   - Detect window title or use accessibility API
+   - Same strategy: all DMs alert, channels only if configured
+
+## Technical Details
+
+### Teams Detection
+- Process name: `Microsoft Teams` (bundle: `com.microsoft.teams2`)
+- Has notification center: `com.microsoft.teams2.notificationcenter`
+- Window title parsing works reliably
+- Need to test different scenarios:
+  - Channel vs Chat distinction
+  - Group chats vs 1:1 chats
+  - Meeting windows
+
+### SwiftBar Menu Structure
+For apps with channels:
 ```
-AppName|Type|Name|Color|Action|PushoverPriority|PushoverSound|Enabled
-```
-
-#### Step 1.2: Test with Outlook First
-**Why Outlook first?**
-- Already have working folder detection
-- Easier to test without breaking anything
-- Can validate config format before Teams/Slack complexity
-
-**Current Outlook Config Files**:
-1. `luxafor-config.conf` - Main app config (keep as-is)
-2. `luxafor-outlook-folders.conf` - Current special folders (will migrate)
-3. `luxafor-channels.conf` - NEW unified format (create next)
-
-#### Step 1.3: Migration Strategy
-- Read both old and new configs during transition
-- New config takes precedence if both exist
-- Provide migration script for users
-
-### Testing Checkpoints
-
-✅ **Checkpoint 0**: Backup created, git branch ready
-✅ **Checkpoint 1**: New config file created and parsing works
-✅ **Checkpoint 2**: Outlook folders work with new config (TESTED & WORKING!)
-✅ **Checkpoint 3**: SwiftBar shows specific folder that triggered
-⏳ **Checkpoint 4**: Add SwiftBar submenus for individual folder control
-⏳ **Checkpoint 5**: Ready for Teams/Slack implementation
-
-### Rollback Procedures
-
-**If something breaks**:
-```bash
-# Option 1: Git rollback
-git checkout main
-./luxafor-control.sh restart
-
-# Option 2: Config backup
-cp ~/.luxafor-backups/[latest]/* .
-./luxafor-control.sh restart
+☑ Teams ▸
+  Teams:
+  -----
+  ☑ All Chats
+  -----
+  ☑ Security Alerts
+  ☐ Incidents
 ```
 
-### Key Files Being Modified
+### State Management
+- Each channel/folder can be individually enabled/disabled
+- State persists in `luxafor-channels.conf`
+- Toggle script preserves formatting and comments
+- Monitor restarts automatically on config changes
 
-1. **luxafor-channels.conf** (NEW)
-   - Unified config for all channel/folder rules
-   
-2. **luxafor-notify.sh**
-   - Add channel config parser
-   - Modify main loop to check channels first
-   
-3. **luxafor-toggle.1s.sh**
-   - Add submenu generation
-   - Handle channel enable/disable
+## Current Architecture
 
-### Design Decisions Log
+1. **luxafor-notify.sh**: Main monitoring script
+   - Polls badge counts and special folders/channels
+   - Determines highest priority notification
+   - Controls LED color/flash
+   - Sends Pushover alerts on state changes
 
-**2025-07-15**: 
-- Decided to use separate config file rather than extending existing
-- Keeps configs focused and backward compatible
-- Easier to disable entire feature if needed
+2. **luxafor-toggle.1s.sh**: SwiftBar menu plugin
+   - Shows current notification status
+   - Provides app/channel toggles
+   - Launches config editors
+   - Shows submenu for apps with channels
 
-### Completed Steps
-1. ✅ Created `luxafor-channels.conf` with unified format
-2. ✅ Added parser function to read channel config  
-3. ✅ Tested with Outlook folders - working perfectly!
-4. ✅ Fixed duplicate process issue in control script
-5. ✅ SwiftBar shows specific folder (e.g., "Phishing folder")
-6. ✅ Channel-specific Pushover settings working (priority, sounds)
+3. **luxafor-channels.conf**: Unified channel configuration
+   - Format: `AppName|Type|Name|Color|Action|PushoverPriority|PushoverSound|Enabled`
+   - Supports folders, channels, chats
+   - Individual settings per item
 
-### What's Working Now
-- Phishing folder: Yellow flash + siren alert
-- Inbox folder: Blue solid + normal pushover
-- VIP folder: Cyan solid + tugboat sound
-- State file tracks current folder for SwiftBar display
-- Control script properly manages launch agent
-
-### Next Steps
-1. Add SwiftBar submenus for Outlook folders
-2. Create toggle system for individual folders
-3. Then proceed to Teams/Slack channel detection
+4. **toggle-channel.sh**: Individual channel toggle script
+   - Updates enabled state in config
+   - Preserves formatting
+   - Triggers monitor restart

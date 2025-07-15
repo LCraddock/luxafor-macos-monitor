@@ -109,7 +109,7 @@ if [ "$STATUS" = "running" ]; then
     declare -a PRIORITIES
     
     # Read config file
-    local index=0
+    index=0
     while IFS='|' read -r name bundle color priority || [ -n "$name" ]; do
         # Skip comments and empty lines
         [[ "$name" =~ ^[[:space:]]*# ]] && continue
@@ -155,6 +155,24 @@ if [ "$STATUS" = "running" ]; then
                     fi
                 else
                     badge_count=0  # No configured folders active
+                fi
+            else
+                badge_count=0
+            fi
+        elif [[ "$app_name" == "Teams" ]]; then
+            # Show Teams channel/chat info if active
+            if [ -f "/tmp/luxafor-state" ]; then
+                state_app=$(grep "^app=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                state_channel=$(grep "^channel=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                if [[ "$state_app" == "Teams" ]] && [[ -n "$state_channel" ]]; then
+                    note=" ($state_channel)"
+                    # Only show if currently active
+                    state_color=$(grep "^color=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                    if [[ "$state_color" == "off" ]]; then
+                        badge_count=0  # Don't show count if LED is off
+                    fi
+                else
+                    badge_count=0  # No active Teams notifications
                 fi
             else
                 badge_count=0
@@ -209,29 +227,87 @@ if [ "$STATUS" = "running" ]; then
         # Display with submenu if has channels
         if [[ "$has_channels" == "true" ]]; then
             echo "$checkbox $name ▸ | color=$color"
-            echo "--$name folders: | color=gray"
-            echo "-----"
             
-            # Show individual channels/folders
-            while IFS='|' read -r app_name type item_name item_color item_action priority sound enabled || [ -n "$app_name" ]; do
-                # Skip comments and empty lines
-                [[ "$app_name" =~ ^[[:space:]]*# ]] && continue
-                [[ -z "$app_name" ]] && continue
+            # Special handling for Teams - show chats and channels separately
+            if [[ "$name" == "Teams" ]]; then
+                echo "--$name: | color=gray"
+                echo "-----"
                 
-                # Trim whitespace
-                app_name=$(echo "$app_name" | xargs)
-                type=$(echo "$type" | xargs)
-                item_name=$(echo "$item_name" | xargs)
-                enabled=$(echo "$enabled" | xargs)
-                
-                if [[ "$app_name" == "$name" ]]; then
-                    if [[ "$enabled" == "true" ]]; then
-                        echo "--☑ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='false' terminal=false refresh=true"
-                    else
-                        echo "--☐ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='true' terminal=false refresh=true"
+                # Show chats first
+                while IFS='|' read -r app_name type item_name item_color item_action priority sound enabled || [ -n "$app_name" ]; do
+                    # Skip comments and empty lines
+                    [[ "$app_name" =~ ^[[:space:]]*# ]] && continue
+                    [[ -z "$app_name" ]] && continue
+                    
+                    # Trim whitespace
+                    app_name=$(echo "$app_name" | xargs)
+                    type=$(echo "$type" | xargs)
+                    item_name=$(echo "$item_name" | xargs)
+                    enabled=$(echo "$enabled" | xargs)
+                    
+                    if [[ "$app_name" == "$name" ]] && [[ "$type" == "chat" ]]; then
+                        if [[ "$item_name" == "_all_chats" ]]; then
+                            display_name="All Chats"
+                        else
+                            display_name="$item_name"
+                        fi
+                        
+                        if [[ "$enabled" == "true" ]]; then
+                            echo "--☑ $display_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='false' terminal=false refresh=true"
+                        else
+                            echo "--☐ $display_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='true' terminal=false refresh=true"
+                        fi
                     fi
-                fi
-            done < "$SCRIPT_DIR/luxafor-channels.conf"
+                done < "$SCRIPT_DIR/luxafor-channels.conf"
+                
+                echo "-----"
+                
+                # Show channels
+                while IFS='|' read -r app_name type item_name item_color item_action priority sound enabled || [ -n "$app_name" ]; do
+                    # Skip comments and empty lines
+                    [[ "$app_name" =~ ^[[:space:]]*# ]] && continue
+                    [[ -z "$app_name" ]] && continue
+                    
+                    # Trim whitespace
+                    app_name=$(echo "$app_name" | xargs)
+                    type=$(echo "$type" | xargs)
+                    item_name=$(echo "$item_name" | xargs)
+                    enabled=$(echo "$enabled" | xargs)
+                    
+                    if [[ "$app_name" == "$name" ]] && [[ "$type" == "channel" ]]; then
+                        if [[ "$enabled" == "true" ]]; then
+                            echo "--☑ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='false' terminal=false refresh=true"
+                        else
+                            echo "--☐ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='true' terminal=false refresh=true"
+                        fi
+                    fi
+                done < "$SCRIPT_DIR/luxafor-channels.conf"
+            else
+                # Non-Teams apps (like Outlook) - show folders
+                echo "--$name folders: | color=gray"
+                echo "-----"
+                
+                # Show individual channels/folders
+                while IFS='|' read -r app_name type item_name item_color item_action priority sound enabled || [ -n "$app_name" ]; do
+                    # Skip comments and empty lines
+                    [[ "$app_name" =~ ^[[:space:]]*# ]] && continue
+                    [[ -z "$app_name" ]] && continue
+                    
+                    # Trim whitespace
+                    app_name=$(echo "$app_name" | xargs)
+                    type=$(echo "$type" | xargs)
+                    item_name=$(echo "$item_name" | xargs)
+                    enabled=$(echo "$enabled" | xargs)
+                    
+                    if [[ "$app_name" == "$name" ]]; then
+                        if [[ "$enabled" == "true" ]]; then
+                            echo "--☑ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='false' terminal=false refresh=true"
+                        else
+                            echo "--☐ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='true' terminal=false refresh=true"
+                        fi
+                    fi
+                done < "$SCRIPT_DIR/luxafor-channels.conf"
+            fi
         else
             echo "$checkbox $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='$action' terminal=false refresh=true color=$color"
         fi
