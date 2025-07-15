@@ -92,23 +92,34 @@ Basic: `red`, `green`, `blue`, `yellow`, `magenta`, `cyan`, `orange`, `purple`, 
 
 Hex: `0xFF00FF` or `#FF00FF`
 
-### Outlook Special Folders
+### Channel-Specific Monitoring
 
-Monitor specific Outlook folders with custom colors and actions. Edit `~/.luxafor-monitor/luxafor-outlook-folders.conf`:
+Configure specific channels and folders for granular notification control. Edit `luxafor-channels.conf`:
 
 ```bash
-# Format: FolderName|Color|Action
+# Format: AppName|Type|Name|Color|Action|PushoverPriority|PushoverSound|Enabled
 # Action can be: solid (default) or flash
-Phishing|yellow|flash
-Security Alerts|red|flash
-VIP|cyan|solid
+# PushoverSound: pushover, bike, bugle, cashregister, classical, cosmic, falling, gamelan, incoming, intermission, magic, mechanical, pianobar, siren, spacealarm, tugboat, alien, climb, persistent, echo, updown, vibrate, none
+
+# Outlook Folders
+Outlook|folder|Phishing|yellow|flash|1|siren|false
+Outlook|folder|Inbox|blue|solid|0|pushover|true
+Outlook|folder|VIP|cyan|solid|1|tugboat|false
+
+# Future: Teams/Slack channels can be added here
 ```
 
-When emails appear in these folders:
-- The Luxafor will use the special folder's color instead of Outlook's default
-- If action is "flash", the LED will flash continuously until the emails are read
-- The first matching folder in the list takes precedence
-- Still respects Outlook's priority compared to other apps
+**Important Behavior Change**: 
+- Outlook ONLY alerts on explicitly configured folders listed above
+- There is no "all folders" monitoring - only folders in the channels config will trigger notifications
+- Each folder can be individually enabled/disabled via the SwiftBar menu
+- Each folder has its own color, flash mode, and Pushover settings
+
+When emails appear in enabled folders:
+- The Luxafor will use the folder's specific color
+- If action is "flash", the LED will flash continuously
+- Pushover alerts use the folder's specific priority and sound
+- Disabled folders will NOT trigger any notifications
 
 ## Requirements
 

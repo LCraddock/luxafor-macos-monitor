@@ -271,14 +271,12 @@ while true; do
     # Get badge count
     badge_count=$(get_badge_lsappinfo "$bundle_id")
     
-    # Special handling for Outlook
+    # Special handling for Outlook - ONLY check configured folders
     if [[ "$app_name" == "Outlook" ]]; then
-      outlook_total=$(get_outlook_unread_total)
-      if [[ "$outlook_total" -gt "$badge_count" ]]; then
-        badge_count=$outlook_total
-      fi
+      # Skip general badge count - we only care about configured folders
+      badge_count=0
       
-      # Check special folders - try new config first, then old
+      # Check configured folders
       if is_app_enabled "$app_name"; then
         # First check new channels config
         found_in_channels=false
@@ -298,14 +296,15 @@ while true; do
               outlook_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
               outlook_pushover_sound="${CHANNEL_SOUNDS[$i]}"
               found_in_channels=true
+              badge_count=$folder_count  # Set badge count for this folder
               debug_log "Found mail in channel config folder: $folder_name"
               break
             fi
           fi
         done
         
-        # Fall back to old config if not found in channels
-        if [[ "$found_in_channels" == "false" ]] && [ -f "$OUTLOOK_FOLDERS_CONFIG" ]; then
+        # Fall back to old config if not found in channels (DISABLED - using channels now)
+        if false && [[ "$found_in_channels" == "false" ]] && [ -f "$OUTLOOK_FOLDERS_CONFIG" ]; then
           while IFS='|' read -r folder folder_color action || [ -n "$folder" ]; do
             # Skip comments and empty lines
             [[ "$folder" =~ ^[[:space:]]*# ]] && continue

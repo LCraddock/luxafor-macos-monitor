@@ -142,22 +142,22 @@ if [ "$STATUS" = "running" ]; then
         
         # Special handling for Outlook
         if [[ "$app_name" == "Outlook" ]]; then
-            # Only show notification count if from configured folders
-            if [ -f "/tmp/luxafor-state" ]; then
-                state_app=$(grep "^app=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
-                state_folder=$(grep "^folder=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
-                if [[ "$state_app" == "Outlook" ]] && [[ -n "$state_folder" ]]; then
-                    note=" ($state_folder folder)"
-                    # Only show if currently active
-                    state_color=$(grep "^color=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
-                    if [[ "$state_color" == "off" ]]; then
-                        badge_count=0  # Don't show count if LED is off
+            outlook_total=$(get_outlook_unread_total)
+            if [[ "$outlook_total" -gt "$badge_count" ]]; then
+                badge_count=$outlook_total
+                # Check if we have specific folder info from state file
+                if [ -f "/tmp/luxafor-state" ]; then
+                    state_folder=$(grep "^folder=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                    if [[ -n "$state_folder" ]]; then
+                        note=" ($state_folder folder)"
+                    else
+                        note=" (all folders)"
                     fi
                 else
-                    badge_count=0  # No configured folders active
+                    note=" (all folders)"
                 fi
             else
-                badge_count=0
+                note=""
             fi
         else
             note=""
@@ -191,49 +191,9 @@ if [ "$STATUS" = "running" ]; then
         
         # Check if enabled
         if grep -q "^${name}|disabled" "$SCRIPT_DIR/luxafor-enabled-apps.conf" 2>/dev/null; then
-            checkbox="☐"
-            action="enable"
+            echo "☐ $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='enable' terminal=false refresh=true color=$color"
         else
-            checkbox="☑"
-            action="disable"
-        fi
-        
-        # Check if this app has channels/folders configured
-        has_channels=false
-        if [ -f "$SCRIPT_DIR/luxafor-channels.conf" ]; then
-            if grep -q "^${name}|" "$SCRIPT_DIR/luxafor-channels.conf" 2>/dev/null; then
-                has_channels=true
-            fi
-        fi
-        
-        # Display with submenu if has channels
-        if [[ "$has_channels" == "true" ]]; then
-            echo "$checkbox $name ▸ | color=$color"
-            echo "--$checkbox All $name notifications | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='$action' terminal=false refresh=true"
-            echo "-----"
-            
-            # Show individual channels/folders
-            while IFS='|' read -r app_name type item_name item_color item_action priority sound enabled || [ -n "$app_name" ]; do
-                # Skip comments and empty lines
-                [[ "$app_name" =~ ^[[:space:]]*# ]] && continue
-                [[ -z "$app_name" ]] && continue
-                
-                # Trim whitespace
-                app_name=$(echo "$app_name" | xargs)
-                type=$(echo "$type" | xargs)
-                item_name=$(echo "$item_name" | xargs)
-                enabled=$(echo "$enabled" | xargs)
-                
-                if [[ "$app_name" == "$name" ]]; then
-                    if [[ "$enabled" == "true" ]]; then
-                        echo "--☑ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='false' terminal=false refresh=true"
-                    else
-                        echo "--☐ $item_name | bash='$SCRIPT_DIR/toggle-channel.sh' param1='$name' param2='$type' param3='$item_name' param4='true' terminal=false refresh=true"
-                    fi
-                fi
-            done < "$SCRIPT_DIR/luxafor-channels.conf"
-        else
-            echo "$checkbox $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='$action' terminal=false refresh=true color=$color"
+            echo "☑ $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='disable' terminal=false refresh=true color=$color"
         fi
     done < "$CONFIG_FILE"
     
@@ -256,7 +216,7 @@ fi
 
 echo "---"
 echo "Edit Config | bash='code' param1='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
-echo "Edit Channels/Folders | bash='code' param1='$SCRIPT_DIR/luxafor-channels.conf' terminal=false"
+echo "Edit Outlook Folders | bash='code' param1='$SCRIPT_DIR/luxafor-outlook-folders.conf' terminal=false"
 echo "Edit Pushover Alerts | bash='code' param1='$SCRIPT_DIR/luxafor-pushover.conf' terminal=false"
 echo "Edit Burp Flash | bash='code' param1='$SCRIPT_DIR/luxafor-burp-flash.sh' terminal=false"
 echo "Restart Monitor | bash='$SCRIPT_DIR/luxafor-control.sh' param1='restart' terminal=true"
