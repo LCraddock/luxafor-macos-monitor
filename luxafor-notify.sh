@@ -471,21 +471,26 @@ while true; do
       # Use channel-specific settings if available
       push_priority="0"
       push_sound="pushover"
+      push_message="$winning_app notification"
       
       if [[ "$winning_app" == "Outlook" ]] && [[ "$outlook_has_special" == "true" ]]; then
         push_priority="$outlook_pushover_priority"
         push_sound="$outlook_pushover_sound"
+        push_message="$winning_app: $outlook_special_folder"
       fi
       
       if [[ "$winning_app" == "Teams" ]] && [[ "$teams_has_special" == "true" ]]; then
         push_priority="$teams_pushover_priority"
         push_sound="$teams_pushover_sound"
+        if [[ -n "$teams_current_channel" ]]; then
+          push_message="$winning_app: $teams_current_channel"
+        fi
       fi
       
       # Don't send if sound is "none"
       if [[ "$push_sound" != "none" ]]; then
-        debug_log "Pushover settings: priority=$push_priority, sound=$push_sound"
-        send_pushover "$winning_app" "$winning_app notification" "$push_priority" "$push_sound"
+        debug_log "Pushover settings: priority=$push_priority, sound=$push_sound, message=$push_message"
+        send_pushover "$winning_app" "$push_message" "$push_priority" "$push_sound"
       else
         debug_log "Skipping Pushover - sound is 'none'"
       fi

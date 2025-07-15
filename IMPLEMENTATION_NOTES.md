@@ -11,14 +11,19 @@
    - Removed "all folders" fallback - ONLY alerts on configured folders
    - Fixed all issues: Pushover priority 2, duplicate processes, config corruption
 
-### In Progress
+### Completed Features
 
-2. **Teams Channel Detection**
+2. **Teams Channel Detection** ✓
    - Window title format: `Type | Channel/Chat Name | Microsoft Teams`
-   - Can extract channel/chat name from window title
-   - Strategy:
-     - All chats/DMs alert by default
-     - Channels only alert if explicitly configured
+   - Successfully extracts channel/chat name from window title
+   - Implementation:
+     - All chats/DMs alert by default (when _all_chats is enabled)
+     - Channels only alert if explicitly configured AND enabled
+   - Pushover notifications include source: "Teams: Chat/Channel Name"
+   - **Limitation**: Teams only creates dock badges for:
+     - Direct messages and group chats
+     - Channel messages where you're @mentioned
+     - Regular channel messages do NOT create dock badges (even with notifications enabled)
    - Config format:
      ```
      Teams|chat|_all_chats|blue|solid|0|pushover|true
