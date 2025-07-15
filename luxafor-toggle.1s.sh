@@ -209,7 +209,7 @@ if [ "$STATUS" = "running" ]; then
         # Display with submenu if has channels
         if [[ "$has_channels" == "true" ]]; then
             echo "$checkbox $name ▸ | color=$color"
-            echo "--$checkbox All $name notifications | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='$action' terminal=false refresh=true"
+            echo "--$name folders: | color=gray"
             echo "-----"
             
             # Show individual channels/folders
