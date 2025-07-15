@@ -145,7 +145,17 @@ if [ "$STATUS" = "running" ]; then
             outlook_total=$(get_outlook_unread_total)
             if [[ "$outlook_total" -gt "$badge_count" ]]; then
                 badge_count=$outlook_total
-                note=" (all folders)"
+                # Check if we have specific folder info from state file
+                if [ -f "/tmp/luxafor-state" ]; then
+                    state_folder=$(grep "^folder=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                    if [[ -n "$state_folder" ]]; then
+                        note=" ($state_folder folder)"
+                    else
+                        note=" (all folders)"
+                    fi
+                else
+                    note=" (all folders)"
+                fi
             else
                 note=""
             fi

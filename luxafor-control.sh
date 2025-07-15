@@ -10,22 +10,49 @@ PID_FILE="$SCRIPT_DIR/.luxafor-notify.pid"
 # No logging - runs silently
 
 start() {
-    if [ -f "$PID_FILE" ]; then
-        PID=$(cat "$PID_FILE")
-        if ps -p "$PID" > /dev/null 2>&1; then
-            echo "Luxafor notify is already running (PID: $PID)"
-            return 1
+    # Use launch agent if available
+    PLIST_PATH="$HOME/Library/LaunchAgents/com.luxafor.notify.plist"
+    if [ -f "$PLIST_PATH" ]; then
+        echo "Starting Luxafor notify via launch agent..."
+        # Kill any manually started processes first
+        pkill -f "luxafor-notify.sh" 2>/dev/null || true
+        sleep 1
+        
+        # Load launch agent
+        launchctl load "$PLIST_PATH" 2>/dev/null || echo "Already loaded"
+        
+        # Get PID from launch agent
+        sleep 1
+        PID=$(launchctl list | grep "com.luxafor.notify" | awk '{print $1}')
+        if [ "$PID" != "-" ]; then
+            echo "Started with PID: $PID"
+            echo $PID > "$PID_FILE"
         fi
+    else
+        # Fallback to manual start
+        if [ -f "$PID_FILE" ]; then
+            PID=$(cat "$PID_FILE")
+            if ps -p "$PID" > /dev/null 2>&1; then
+                echo "Luxafor notify is already running (PID: $PID)"
+                return 1
+            fi
+        fi
+        
+        echo "Starting Luxafor notify..."
+        nohup "$NOTIFY_SCRIPT" > /dev/null 2>&1 &
+        echo $! > "$PID_FILE"
+        echo "Started with PID: $(cat "$PID_FILE")"
     fi
-    
-    echo "Starting Luxafor notify..."
-    nohup "$NOTIFY_SCRIPT" > /dev/null 2>&1 &
-    echo $! > "$PID_FILE"
-    echo "Started with PID: $(cat "$PID_FILE")"
 }
 
 stop() {
-    # Kill any running instances first
+    # Unload launch agent if available
+    PLIST_PATH="$HOME/Library/LaunchAgents/com.luxafor.notify.plist"
+    if [ -f "$PLIST_PATH" ]; then
+        launchctl unload "$PLIST_PATH" 2>/dev/null || true
+    fi
+    
+    # Kill any running instances
     pkill -f "luxafor-notify.sh" 2>/dev/null || true
     
     # Clean up PID file

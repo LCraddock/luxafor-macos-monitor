@@ -40,9 +40,10 @@ AppName|Type|Name|Color|Action|PushoverPriority|PushoverSound|Enabled
 
 ✅ **Checkpoint 0**: Backup created, git branch ready
 ✅ **Checkpoint 1**: New config file created and parsing works
-✅ **Checkpoint 2**: Outlook folders work with new config (basic integration done, testing needed)
-⏳ **Checkpoint 3**: SwiftBar shows Outlook submenus
-⏳ **Checkpoint 4**: Ready for Teams/Slack implementation
+✅ **Checkpoint 2**: Outlook folders work with new config (TESTED & WORKING!)
+✅ **Checkpoint 3**: SwiftBar shows specific folder that triggered
+⏳ **Checkpoint 4**: Add SwiftBar submenus for individual folder control
+⏳ **Checkpoint 5**: Ready for Teams/Slack implementation
 
 ### Rollback Procedures
 
@@ -77,8 +78,22 @@ cp ~/.luxafor-backups/[latest]/* .
 - Keeps configs focused and backward compatible
 - Easier to disable entire feature if needed
 
+### Completed Steps
+1. ✅ Created `luxafor-channels.conf` with unified format
+2. ✅ Added parser function to read channel config  
+3. ✅ Tested with Outlook folders - working perfectly!
+4. ✅ Fixed duplicate process issue in control script
+5. ✅ SwiftBar shows specific folder (e.g., "Phishing folder")
+6. ✅ Channel-specific Pushover settings working (priority, sounds)
+
+### What's Working Now
+- Phishing folder: Yellow flash + siren alert
+- Inbox folder: Blue solid + normal pushover
+- VIP folder: Cyan solid + tugboat sound
+- State file tracks current folder for SwiftBar display
+- Control script properly manages launch agent
+
 ### Next Steps
-1. Create `luxafor-channels.conf` with Outlook examples
-2. Add parser function to read channel config
-3. Test with existing Outlook folders
-4. Only then proceed to Teams/Slack
+1. Add SwiftBar submenus for Outlook folders
+2. Create toggle system for individual folders
+3. Then proceed to Teams/Slack channel detection

@@ -258,6 +258,7 @@ while true; do
   special_folder_action=""
   special_folder_color=""
   outlook_has_special=false
+  outlook_special_folder=""
   outlook_pushover_priority="0"
   outlook_pushover_sound="pushover"
   
@@ -291,6 +292,7 @@ while true; do
             
             if [[ "$folder_count" -gt 0 ]]; then
               outlook_has_special=true
+              outlook_special_folder="$folder_name"
               special_folder_color="${CHANNEL_COLORS[$i]}"
               special_folder_action="${CHANNEL_ACTIONS[$i]}"
               outlook_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
@@ -377,6 +379,14 @@ while true; do
   
   # Update previous color for next iteration
   previous_color="$selected_color"
+  
+  # Write current state for SwiftBar to read
+  state_file="/tmp/luxafor-state"
+  echo "color=$selected_color" > "$state_file"
+  echo "app=$winning_app" >> "$state_file"
+  if [[ "$winning_app" == "Outlook" ]] && [[ -n "$outlook_special_folder" ]]; then
+    echo "folder=$outlook_special_folder" >> "$state_file"
+  fi
   
   # Handle LED based on whether we need to flash or not
   if [[ "$outlook_has_special" == "true" ]] && [[ "$special_folder_action" == "flash" ]] && [[ "$highest_priority" -eq 2 ]]; then
