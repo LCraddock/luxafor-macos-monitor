@@ -194,6 +194,7 @@ fi
 
 echo "---"
 echo "Edit Config | bash='code' param1='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
+echo "Edit Outlook Folders | bash='code' param1='$SCRIPT_DIR/luxafor-outlook-folders.conf' terminal=false"
 echo "Edit Burp Flash | bash='code' param1='$SCRIPT_DIR/luxafor-burp-flash.sh' terminal=false"
 echo "Restart Monitor | bash='$SCRIPT_DIR/luxafor-control.sh' param1='restart' terminal=true"
 echo "---"

@@ -55,6 +55,8 @@ That's it! The monitor is now running and will start automatically on login.
 
 ## Configuration
 
+### Main Configuration
+
 Edit `~/.luxafor-monitor/luxafor-config.conf` to customize:
 
 ```bash
@@ -82,6 +84,24 @@ lsappinfo list | grep -i "app name"
 Basic: `red`, `green`, `blue`, `yellow`, `magenta`, `cyan`, `orange`, `purple`, `pink`, `white`, `off`
 
 Hex: `0xFF00FF` or `#FF00FF`
+
+### Outlook Special Folders
+
+Monitor specific Outlook folders with custom colors and actions. Edit `~/.luxafor-monitor/luxafor-outlook-folders.conf`:
+
+```bash
+# Format: FolderName|Color|Action
+# Action can be: solid (default) or flash
+Phishing|yellow|flash
+Security Alerts|red|flash
+VIP|cyan|solid
+```
+
+When emails appear in these folders:
+- The Luxafor will use the special folder's color instead of Outlook's default
+- If action is "flash", the LED will flash continuously until the emails are read
+- The first matching folder in the list takes precedence
+- Still respects Outlook's priority compared to other apps
 
 ## Requirements
 

@@ -7,6 +7,7 @@
 POLL_INTERVAL=5
 LUXAFOR_CLI="/Users/larry.craddock/Projects/luxafor-cli/build/luxafor"
 CONFIG_FILE="/Users/larry.craddock/Projects/luxafor/luxafor-config.conf"
+OUTLOOK_FOLDERS_CONFIG="/Users/larry.craddock/Projects/luxafor/luxafor-outlook-folders.conf"
 
 # Arrays to store config
 declare -a APP_NAMES
@@ -85,6 +86,42 @@ APPLESCRIPT
   fi
 }
 
+# Check specific Outlook folder for unread emails
+check_outlook_special_folder() {
+  local folder_name="$1"
+  local count=$(osascript <<APPLESCRIPT 2>/dev/null
+tell application "Microsoft Outlook"
+    try
+        set targetFolder to missing value
+        set defaultAcct to default account
+        
+        repeat with eachFolder in (get mail folders of defaultAcct)
+            if name of eachFolder is "${folder_name}" then
+                set targetFolder to eachFolder
+                exit repeat
+            end if
+        end repeat
+        
+        if targetFolder is not missing value then
+            return (unread count of targetFolder) as integer
+        else
+            return 0
+        end if
+        
+    on error
+        return 0
+    end try
+end tell
+APPLESCRIPT
+)
+  
+  if [[ "$count" =~ ^[0-9]+$ ]]; then
+    echo "$count"
+  else
+    echo "0"
+  fi
+}
+
 # Load configuration
 load_config
 
@@ -110,6 +147,9 @@ while true; do
   # Find highest priority app with notifications
   highest_priority=999
   selected_color="off"
+  special_folder_action=""
+  special_folder_color=""
+  outlook_has_special=false
   
   for i in "${!APP_NAMES[@]}"; do
     app_name="${APP_NAMES[$i]}"
@@ -126,17 +166,53 @@ while true; do
       if [[ "$outlook_total" -gt "$badge_count" ]]; then
         badge_count=$outlook_total
       fi
+      
+      # Check special folders if Outlook is enabled
+      if is_app_enabled "$app_name" && [ -f "$OUTLOOK_FOLDERS_CONFIG" ]; then
+        while IFS='|' read -r folder folder_color action || [ -n "$folder" ]; do
+          # Skip comments and empty lines
+          [[ "$folder" =~ ^[[:space:]]*# ]] && continue
+          [[ -z "$folder" ]] && continue
+          
+          # Trim whitespace
+          folder=$(echo "$folder" | xargs)
+          folder_color=$(echo "$folder_color" | xargs)
+          action=$(echo "$action" | xargs)
+          
+          # Check if this folder has unread emails
+          folder_count=$(check_outlook_special_folder "$folder")
+          if [[ "$folder_count" -gt 0 ]]; then
+            outlook_has_special=true
+            special_folder_color="$folder_color"
+            special_folder_action="$action"
+            break  # Use first matching special folder
+          fi
+        done < "$OUTLOOK_FOLDERS_CONFIG"
+      fi
     fi
     
     # Check if this app is enabled and has notifications and higher priority
     if is_app_enabled "$app_name" && [[ "$badge_count" -gt 0 ]] && [[ "$priority" -lt "$highest_priority" ]]; then
       highest_priority=$priority
       selected_color=$color
+      
+      # If this is Outlook with special folder, override color/action
+      if [[ "$app_name" == "Outlook" ]] && [[ "$outlook_has_special" == "true" ]]; then
+        selected_color=$special_folder_color
+      fi
     fi
   done
   
-  # Set the LED color
-  $LUXAFOR_CLI $selected_color >/dev/null 2>&1
-  
-  sleep "$POLL_INTERVAL"
+  # Handle LED based on whether we need to flash or not
+  if [[ "$outlook_has_special" == "true" ]] && [[ "$special_folder_action" == "flash" ]] && [[ "$highest_priority" -eq 2 ]]; then
+    # Flash mode for special Outlook folders
+    $LUXAFOR_CLI $selected_color >/dev/null 2>&1
+    sleep 0.5
+    $LUXAFOR_CLI off >/dev/null 2>&1
+    sleep 0.5
+  else
+    # Normal solid color mode
+    $LUXAFOR_CLI $selected_color >/dev/null 2>&1
+    sleep "$POLL_INTERVAL"
+  fi
 done

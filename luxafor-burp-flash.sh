@@ -3,7 +3,7 @@
 # Flash Luxafor with Burp Suite color (RGB: 92,74,250)
 # 
 # Edit this file to customize the Burp Suite launch flash
-#
+# The flash is to remind me to notify the soc if I'm working on something they don't expect
 
 LUXAFOR_CLI="/Users/larry.craddock/Projects/luxafor-cli/build/luxafor"
 
