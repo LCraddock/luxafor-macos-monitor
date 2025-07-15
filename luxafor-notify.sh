@@ -4,10 +4,21 @@
 # Monitors apps for notifications based on config file
 #
 
+# Debug mode - set to true to enable logging
+DEBUG_MODE="${DEBUG_MODE:-false}"
+
+debug_log() {
+    if [[ "$DEBUG_MODE" == "true" ]]; then
+        echo "[$(date '+%H:%M:%S')] $1" >> /tmp/luxafor-debug.log
+    fi
+}
+
 POLL_INTERVAL=5
 LUXAFOR_CLI="/Users/larry.craddock/Projects/luxafor-cli/build/luxafor"
 CONFIG_FILE="/Users/larry.craddock/Projects/luxafor/luxafor-config.conf"
 OUTLOOK_FOLDERS_CONFIG="/Users/larry.craddock/Projects/luxafor/luxafor-outlook-folders.conf"
+PUSHOVER_CONFIG="/Users/larry.craddock/Projects/luxafor/luxafor-pushover.conf"
+
 
 # Arrays to store config
 declare -a APP_NAMES
@@ -125,6 +136,9 @@ APPLESCRIPT
 # Load configuration
 load_config
 
+# Track previous LED state
+previous_color="off"
+
 # Check if app is enabled
 is_app_enabled() {
     local app_name="$1"
@@ -142,6 +156,38 @@ is_app_enabled() {
     
     return 0
 }
+
+# Send Pushover notification
+send_pushover() {
+    local app_name="$1"
+    local message="$2"
+    local priority="${3:-0}"
+    local sound="${4:-pushover}"
+    
+    # Check if Pushover is enabled
+    if [ -f "$PUSHOVER_CONFIG" ]; then
+        # Only read the specific variables we need
+        eval $(grep "^PUSHOVER_APP_TOKEN=" "$PUSHOVER_CONFIG")
+        eval $(grep "^PUSHOVER_USER_KEY=" "$PUSHOVER_CONFIG")
+        eval $(grep "^PUSHOVER_ENABLED=" "$PUSHOVER_CONFIG")
+        
+        if [[ "$PUSHOVER_ENABLED" != "true" ]]; then
+            return
+        fi
+    else
+        return
+    fi
+    
+    # Send the notification
+    curl -s -X POST https://api.pushover.net/1/messages.json \
+        -d "token=$PUSHOVER_APP_TOKEN" \
+        -d "user=$PUSHOVER_USER_KEY" \
+        -d "title=Luxafor: $app_name" \
+        -d "message=$message" \
+        -d "priority=$priority" \
+        -d "sound=$sound" >/dev/null 2>&1
+}
+
 
 while true; do
   # Find highest priority app with notifications
@@ -193,15 +239,38 @@ while true; do
     
     # Check if this app is enabled and has notifications and higher priority
     if is_app_enabled "$app_name" && [[ "$badge_count" -gt 0 ]] && [[ "$priority" -lt "$highest_priority" ]]; then
-      highest_priority=$priority
-      selected_color=$color
-      
-      # If this is Outlook with special folder, override color/action
-      if [[ "$app_name" == "Outlook" ]] && [[ "$outlook_has_special" == "true" ]]; then
-        selected_color=$special_folder_color
-      fi
+        highest_priority=$priority
+        selected_color=$color
+        
+        # If this is Outlook with special folder, override color/action
+        if [[ "$app_name" == "Outlook" ]] && [[ "$outlook_has_special" == "true" ]]; then
+          selected_color=$special_folder_color
+        fi
     fi
   done
+  
+  # Send Pushover only when LED transitions from off to on
+  debug_log "LED state: previous=$previous_color, current=$selected_color"
+  
+  if [[ "$selected_color" != "off" ]] && [[ "$previous_color" == "off" ]] && [[ "$highest_priority" -lt 999 ]]; then
+    # Find which app won the priority
+    winning_app=""
+    for i in "${!APP_NAMES[@]}"; do
+      if [[ "${PRIORITIES[$i]}" -eq "$highest_priority" ]]; then
+        winning_app="${APP_NAMES[$i]}"
+        break
+      fi
+    done
+    
+    # Send simple Pushover notification
+    if [[ -n "$winning_app" ]]; then
+      debug_log "Sending Pushover for $winning_app (transition from off to $selected_color)"
+      send_pushover "$winning_app" "$winning_app notification" "0" "pushover"
+    fi
+  fi
+  
+  # Update previous color for next iteration
+  previous_color="$selected_color"
   
   # Handle LED based on whether we need to flash or not
   if [[ "$outlook_has_special" == "true" ]] && [[ "$special_folder_action" == "flash" ]] && [[ "$highest_priority" -eq 2 ]]; then

@@ -193,8 +193,21 @@ else
 fi
 
 echo "---"
+
+# Check if Pushover is enabled
+if [ -f "$SCRIPT_DIR/luxafor-pushover.conf" ]; then
+    source "$SCRIPT_DIR/luxafor-pushover.conf"
+    if [[ "$PUSHOVER_ENABLED" == "true" ]]; then
+        echo "☑ Pushover Alerts | bash='/bin/bash' param1='-c' param2='sed -i \"\" \"s/PUSHOVER_ENABLED=\\\"true\\\"/PUSHOVER_ENABLED=\\\"false\\\"/\" \"$SCRIPT_DIR/luxafor-pushover.conf\"' terminal=false refresh=true color=green"
+    else
+        echo "☐ Pushover Alerts | bash='/bin/bash' param1='-c' param2='sed -i \"\" \"s/PUSHOVER_ENABLED=\\\"false\\\"/PUSHOVER_ENABLED=\\\"true\\\"/\" \"$SCRIPT_DIR/luxafor-pushover.conf\"' terminal=false refresh=true color=gray"
+    fi
+fi
+
+echo "---"
 echo "Edit Config | bash='code' param1='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
 echo "Edit Outlook Folders | bash='code' param1='$SCRIPT_DIR/luxafor-outlook-folders.conf' terminal=false"
+echo "Edit Pushover Alerts | bash='code' param1='$SCRIPT_DIR/luxafor-pushover.conf' terminal=false"
 echo "Edit Burp Flash | bash='code' param1='$SCRIPT_DIR/luxafor-burp-flash.sh' terminal=false"
 echo "Restart Monitor | bash='$SCRIPT_DIR/luxafor-control.sh' param1='restart' terminal=true"
 echo "---"
