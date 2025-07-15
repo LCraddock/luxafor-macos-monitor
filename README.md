@@ -13,19 +13,26 @@ Automatically monitor Slack, Teams, Zoom, Outlook and other apps for notificatio
 - 🎨 **Customizable Colors** - Assign any color to any app via config file
 - 📊 **Priority System** - Shows highest priority notification when multiple exist
 - 🖥️ **Menu Bar Control** - Start/stop monitoring and see notification counts
+- 📁 **Outlook Folder Monitoring** - Special colors/flash for specific email folders
+- 🔔 **Individual App Toggle** - Enable/disable notifications per app
+- 🚨 **Flash Alerts** - Configure flashing for urgent folders
+- 🟠 **Device Status** - Amber icon when Luxafor disconnected
+- 🚀 **App Launch Effects** - Flash on Burp Suite or other app launches
 - ⚡ **Lightweight** - Near-zero CPU usage, no logging overhead
-- 🔧 **Easy Configuration** - Simple text config file, no coding required
+- 🔧 **Easy Configuration** - Simple text config files, no coding required
 
 ## SwiftBar Menu
 
-![SwiftBar Menu Screenshot](macafor.png)
+![SwiftBar Menu Screenshot](swiftbar.png)
 
 The SwiftBar menu provides complete control over the Luxafor monitor:
 - View current notification counts for all monitored apps
-- Enable/disable notifications for individual apps
-- Quick LED tests and manual color controls
-- Easy access to configuration files
-- Device connection status indicator
+- Enable/disable notifications for individual apps with checkboxes
+- Edit main config, Outlook folders, and Burp flash settings
+- Quick LED tests (6s and 30s options)
+- Manual color controls (hold ⌥ to keep menu open)
+- Device connection status indicator (green/amber/red icon)
+- One-click restart and folder access
 
 ## Quick Start
 
