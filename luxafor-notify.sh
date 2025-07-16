@@ -229,11 +229,18 @@ get_slack_current_channel() {
     fi
     
     # Parse the window title
-    # Format: "Name (Type) - Workspace - Slack"
-    if [[ "$window_title" =~ ^(.+)[[:space:]]\((Channel|DM)\)[[:space:]]-[[:space:]].*[[:space:]]-[[:space:]]Slack$ ]]; then
+    # Format: "Name (Type) - Workspace - X new items - Slack" or "Name (Type) - Workspace - Slack"
+    if [[ "$window_title" =~ ^(.+)[[:space:]]\((Channel|DM)\)[[:space:]]-[[:space:]] ]]; then
         local name="${BASH_REMATCH[1]}"
         local type="${BASH_REMATCH[2]}"
-        echo "$name|$type"
+        
+        # Strip leading "!" from private channel names for comparison
+        local clean_name="$name"
+        if [[ "$name" =~ ^![[:space:]](.+)$ ]]; then
+            clean_name="${BASH_REMATCH[1]}"
+        fi
+        
+        echo "$clean_name|$type"
     else
         echo ""
     fi
