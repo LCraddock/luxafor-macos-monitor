@@ -13,9 +13,11 @@ Automatically monitor Slack, Teams, Zoom, Outlook and other apps for notificatio
 - 🎨 **Customizable Colors** - Assign any color to any app via config file
 - 📊 **Priority System** - Shows highest priority notification when multiple exist
 - 🖥️ **Menu Bar Control** - Start/stop monitoring and see notification counts
-- 📁 **Outlook Folder Monitoring** - Special colors/flash for specific email folders
-- 🔔 **Individual App Toggle** - Enable/disable notifications per app
-- 🚨 **Flash Alerts** - Configure flashing for urgent folders
+- 📁 **Granular Channel/Folder Control** - Configure specific Teams/Slack channels and Outlook folders
+- 💬 **Smart Channel Detection** - Automatically detects which channel/chat triggered the notification
+- 🔔 **Individual Toggle Control** - Enable/disable notifications per app, channel, or folder
+- 🚨 **Flash Alerts** - Configure flashing for urgent channels/folders
+- 📲 **Pushover Integration** - Get mobile alerts with channel-specific sounds and priorities
 - 🟠 **Device Status** - Amber icon when Luxafor disconnected
 - 🚀 **App Launch Effects** - Flash on Burp Suite or other app launches
 - ⚡ **Lightweight** - Near-zero CPU usage, no logging overhead
@@ -26,9 +28,11 @@ Automatically monitor Slack, Teams, Zoom, Outlook and other apps for notificatio
 ![SwiftBar Menu Screenshot](swiftbar.png)
 
 The SwiftBar menu provides complete control over the Luxafor monitor:
-- View current notification counts for all monitored apps
+- View current notification counts with channel/folder details
 - Enable/disable notifications for individual apps with checkboxes
-- Edit main config, Outlook folders, and Burp flash settings
+- Expandable submenus for Teams/Slack channels and Outlook folders
+- Toggle individual channels/folders on/off without editing config
+- Edit main config, channels config, and Pushover settings
 - Quick LED tests (6s and 30s options)
 - Manual color controls (hold ⌥ to keep menu open)
 - Device connection status indicator (green/amber/red icon)
@@ -56,9 +60,12 @@ That's it! The monitor is now running and will start automatically on login.
 ## How It Works
 
 1. Polls notification badges using macOS `lsappinfo` every 5 seconds
-2. For Outlook, also checks all folders (not just inbox)
-3. Sets Luxafor to the color of the highest priority app with notifications
-4. Menu bar icon shows status (🟢 running / 🔴 stopped)
+2. For Teams/Slack, detects which channel/chat triggered the notification
+3. For Outlook, checks only configured folders (not all folders)
+4. Sets Luxafor to the color of the highest priority app with notifications
+5. Uses channel/folder-specific colors and flash modes when configured
+6. Sends Pushover notifications with source details (if enabled)
+7. Menu bar icon shows status (🟢 running / 🟠 no device / 🔴 stopped)
 
 ## Configuration
 
@@ -102,24 +109,59 @@ Configure specific channels and folders for granular notification control. Edit 
 # PushoverSound: pushover, bike, bugle, cashregister, classical, cosmic, falling, gamelan, incoming, intermission, magic, mechanical, pianobar, siren, spacealarm, tugboat, alien, climb, persistent, echo, updown, vibrate, none
 
 # Outlook Folders
-Outlook|folder|Phishing|yellow|flash|1|siren|false
+Outlook|folder|phishing|yellow|flash|1|siren|true
 Outlook|folder|Inbox|blue|solid|0|pushover|true
-Outlook|folder|VIP|cyan|solid|1|tugboat|false
+Outlook|folder|VIP|cyan|solid|1|tugboat|true
 
-# Future: Teams/Slack channels can be added here
+# Teams configuration
+Teams|chat|_all_chats|red|solid|0|pushover|true  # All DMs and chats
+Teams|channel|Red Team|red|flash|1|siren|true     # Specific channel
+
+# Slack configuration  
+Slack|dm|_all_dms|green|solid|0|pushover|true     # All DMs
+Slack|channel|incidents|green|flash|1|tugboat|true # Specific channel
 ```
 
-**Important Behavior Change**: 
-- Outlook ONLY alerts on explicitly configured folders listed above
-- There is no "all folders" monitoring - only folders in the channels config will trigger notifications
-- Each folder can be individually enabled/disabled via the SwiftBar menu
-- Each folder has its own color, flash mode, and Pushover settings
+**Key Behaviors**: 
 
-When emails appear in enabled folders:
-- The Luxafor will use the folder's specific color
-- If action is "flash", the LED will flash continuously
-- Pushover alerts use the folder's specific priority and sound
-- Disabled folders will NOT trigger any notifications
+**Outlook**:
+- ONLY alerts on explicitly configured folders
+- No "all folders" monitoring - must configure each folder
+- Each folder has individual color, flash mode, and Pushover settings
+
+**Teams**: 
+- All chats/DMs alert by default (if `_all_chats` is enabled)
+- Channels only alert if explicitly configured and enabled
+- Automatically detects which chat/channel triggered the notification
+- Note: Teams only creates badges for @mentions and DMs, not regular channel messages
+
+**Slack**:
+- All DMs alert by default (if `_all_dms` is enabled)  
+- Channels only alert if explicitly configured and enabled
+- Handles both public and private channels
+- Shows notification source in Pushover alerts
+
+**All Apps**:
+- Individual channels/folders can be toggled via SwiftBar menu
+- Flash mode makes the LED blink continuously
+- Pushover notifications include the source (channel/folder name)
+- Priority 0=normal, 1=high (bypasses quiet hours)
+
+### Pushover Integration
+
+Get mobile notifications when the Luxafor LED turns on. Edit `luxafor-pushover.conf`:
+
+```bash
+PUSHOVER_APP_TOKEN="your_app_token_here"
+PUSHOVER_USER_KEY="your_user_key_here"
+PUSHOVER_ENABLED="true"  # Set to false to disable
+```
+
+Features:
+- Notifications only sent when LED transitions from off to on
+- Channel/folder-specific sounds and priorities
+- Notification includes source (e.g., "Teams: Lee" or "Slack: incidents")
+- Toggle on/off via SwiftBar menu without editing config
 
 ## Requirements
 
@@ -129,12 +171,14 @@ When emails appear in enabled folders:
 
 ## Menu Bar Features
 
-Click the 🟢/🔴 icon to:
-- View current notification counts
+Click the 🟢/🟠/🔴 icon to:
+- View current notification counts with source details
 - Start/Stop monitoring
-- Edit configuration
-- Run LED tests
-- Set manual colors
+- Toggle apps on/off with expandable channel/folder submenus
+- Toggle Pushover notifications on/off
+- Edit configuration files (main, channels, Pushover)
+- Run LED tests (quick 6s or full 30s)
+- Set manual colors (hold ⌥ to keep menu open)
 
 ## Command Line Usage
 
@@ -203,7 +247,13 @@ The installer script (`install.sh`) automatically updates all paths to match you
 
 ## TODO
 
+- [x] Channel/folder-specific monitoring for Teams, Slack, and Outlook
+- [x] Pushover integration with channel-specific alerts
+- [x] Individual enable/disable for channels and folders
+- [x] Flash mode for urgent notifications
 - [ ] Support for multiple Luxafor devices
 - [ ] Different effects for different priority levels
 - [ ] DND mode scheduling
 - [ ] Support for Luxafor Flag vs Orb differences
+- [ ] Calendar integration for meeting alerts
+- [ ] Webhook support for custom integrations
