@@ -177,6 +177,24 @@ if [ "$STATUS" = "running" ]; then
             else
                 badge_count=0
             fi
+        elif [[ "$app_name" == "Slack" ]]; then
+            # Show Slack channel/DM info if active
+            if [ -f "/tmp/luxafor-state" ]; then
+                state_app=$(grep "^app=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                state_channel=$(grep "^channel=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                if [[ "$state_app" == "Slack" ]] && [[ -n "$state_channel" ]]; then
+                    note=" ($state_channel)"
+                    # Only show if currently active
+                    state_color=$(grep "^color=" /tmp/luxafor-state 2>/dev/null | cut -d'=' -f2)
+                    if [[ "$state_color" == "off" ]]; then
+                        badge_count=0  # Don't show count if LED is off
+                    fi
+                else
+                    badge_count=0  # No active Slack notifications
+                fi
+            else
+                badge_count=0
+            fi
         else
             note=""
         fi
@@ -228,8 +246,8 @@ if [ "$STATUS" = "running" ]; then
         if [[ "$has_channels" == "true" ]]; then
             echo "$checkbox $name ▸ | color=$color"
             
-            # Special handling for Teams - show chats and channels separately
-            if [[ "$name" == "Teams" ]]; then
+            # Special handling for Teams and Slack - show chats/DMs and channels separately
+            if [[ "$name" == "Teams" ]] || [[ "$name" == "Slack" ]]; then
                 echo "--$name: | color=gray"
                 echo "-----"
                 
@@ -245,9 +263,11 @@ if [ "$STATUS" = "running" ]; then
                     item_name=$(echo "$item_name" | xargs)
                     enabled=$(echo "$enabled" | xargs)
                     
-                    if [[ "$app_name" == "$name" ]] && [[ "$type" == "chat" ]]; then
+                    if [[ "$app_name" == "$name" ]] && ([[ "$type" == "chat" ]] || [[ "$type" == "dm" ]]); then
                         if [[ "$item_name" == "_all_chats" ]]; then
                             display_name="All Chats"
+                        elif [[ "$item_name" == "_all_dms" ]]; then
+                            display_name="All DMs"
                         else
                             display_name="$item_name"
                         fi

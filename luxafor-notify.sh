@@ -219,6 +219,42 @@ is_teams_configured_channel() {
     return 1  # Not found
 }
 
+# Get current Slack channel/DM name and type
+get_slack_current_channel() {
+    local window_title=$(osascript -e 'tell application "System Events" to tell process "Slack" to name of front window' 2>/dev/null)
+    
+    if [[ -z "$window_title" ]]; then
+        echo ""
+        return
+    fi
+    
+    # Parse the window title
+    # Format: "Name (Type) - Workspace - Slack"
+    if [[ "$window_title" =~ ^(.+)[[:space:]]\((Channel|DM)\)[[:space:]]-[[:space:]].*[[:space:]]-[[:space:]]Slack$ ]]; then
+        local name="${BASH_REMATCH[1]}"
+        local type="${BASH_REMATCH[2]}"
+        echo "$name|$type"
+    else
+        echo ""
+    fi
+}
+
+# Check if Slack name is a configured channel
+is_slack_configured_channel() {
+    local channel_name="$1"
+    
+    # Check if this name matches any configured Slack channels
+    for i in "${!CHANNEL_APPS[@]}"; do
+        if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
+           [[ "${CHANNEL_TYPES[$i]}" == "channel" ]] && \
+           [[ "${CHANNEL_NAMES[$i]}" == "$channel_name" ]]; then
+            return 0  # Found it
+        fi
+    done
+    
+    return 1  # Not found
+}
+
 # Load configuration
 load_config
 load_channel_config
@@ -434,6 +470,85 @@ while true; do
       fi
     fi
     
+    # Special handling for Slack - check current channel/DM
+    if [[ "$app_name" == "Slack" ]]; then
+      slack_current_info=""
+      slack_current_name=""
+      slack_current_type=""
+      slack_has_special=false
+      slack_special_color=""
+      slack_special_action=""
+      slack_pushover_priority="0"
+      slack_pushover_sound="pushover"
+      
+      # Get current Slack channel/DM name and type
+      if [[ "$badge_count" -gt 0 ]] && is_app_enabled "$app_name"; then
+        slack_current_info=$(get_slack_current_channel)
+        
+        if [[ -n "$slack_current_info" ]]; then
+          # Split the result (name|type)
+          IFS='|' read -r slack_current_name slack_current_type <<< "$slack_current_info"
+          
+          if [[ "$slack_current_type" == "Channel" ]]; then
+            # This is a channel - check if it's configured and enabled
+            if is_slack_configured_channel "$slack_current_name"; then
+              # Check if it's enabled
+              for i in "${!CHANNEL_APPS[@]}"; do
+                if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
+                   [[ "${CHANNEL_TYPES[$i]}" == "channel" ]] && \
+                   [[ "${CHANNEL_NAMES[$i]}" == "$slack_current_name" ]] && \
+                   [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
+                  
+                  # Channel is enabled - use its settings
+                  slack_has_special=true
+                  slack_special_color="${CHANNEL_COLORS[$i]}"
+                  slack_special_action="${CHANNEL_ACTIONS[$i]}"
+                  slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
+                  slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
+                  debug_log "Found Slack channel notification: $slack_current_name"
+                  break
+                fi
+              done
+              
+              # If channel is not enabled, don't alert
+              if [[ "$slack_has_special" == "false" ]]; then
+                badge_count=0
+                debug_log "Slack channel disabled: $slack_current_name"
+              fi
+            else
+              # Channel not configured - don't alert
+              badge_count=0
+              debug_log "Slack channel not configured: $slack_current_name"
+            fi
+          else
+            # This is a DM - check if all DMs are enabled
+            for i in "${!CHANNEL_APPS[@]}"; do
+              if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
+                 [[ "${CHANNEL_TYPES[$i]}" == "dm" ]] && \
+                 [[ "${CHANNEL_NAMES[$i]}" == "_all_dms" ]] && \
+                 [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
+                
+                # All DMs are enabled - use DM settings
+                slack_has_special=true
+                slack_special_color="${CHANNEL_COLORS[$i]}"
+                slack_special_action="${CHANNEL_ACTIONS[$i]}"
+                slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
+                slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
+                debug_log "Found Slack DM notification: $slack_current_name"
+                break
+              fi
+            done
+            
+            # If all DMs are disabled, don't alert
+            if [[ "$slack_has_special" == "false" ]]; then
+              badge_count=0
+              debug_log "Slack DMs disabled: $slack_current_name"
+            fi
+          fi
+        fi
+      fi
+    fi
+    
     # Check if this app is enabled and has notifications and higher priority
     if is_app_enabled "$app_name" && [[ "$badge_count" -gt 0 ]] && [[ "$priority" -lt "$highest_priority" ]]; then
         highest_priority=$priority
@@ -447,6 +562,11 @@ while true; do
         # If this is Teams with special channel/chat, override color/action
         if [[ "$app_name" == "Teams" ]] && [[ "$teams_has_special" == "true" ]]; then
           selected_color=$teams_special_color
+        fi
+        
+        # If this is Slack with special channel/DM, override color/action
+        if [[ "$app_name" == "Slack" ]] && [[ "$slack_has_special" == "true" ]]; then
+          selected_color=$slack_special_color
         fi
     fi
   done
@@ -487,6 +607,14 @@ while true; do
         fi
       fi
       
+      if [[ "$winning_app" == "Slack" ]] && [[ "$slack_has_special" == "true" ]]; then
+        push_priority="$slack_pushover_priority"
+        push_sound="$slack_pushover_sound"
+        if [[ -n "$slack_current_name" ]]; then
+          push_message="$winning_app: $slack_current_name"
+        fi
+      fi
+      
       # Don't send if sound is "none"
       if [[ "$push_sound" != "none" ]]; then
         debug_log "Pushover settings: priority=$push_priority, sound=$push_sound, message=$push_message"
@@ -510,6 +638,9 @@ while true; do
   if [[ "$winning_app" == "Teams" ]] && [[ -n "$teams_current_channel" ]]; then
     echo "channel=$teams_current_channel" >> "$state_file"
   fi
+  if [[ "$winning_app" == "Slack" ]] && [[ -n "$slack_current_name" ]]; then
+    echo "channel=$slack_current_name" >> "$state_file"
+  fi
   
   # Handle LED based on whether we need to flash or not
   should_flash=false
@@ -519,6 +650,10 @@ while true; do
   fi
   
   if [[ "$teams_has_special" == "true" ]] && [[ "$teams_special_action" == "flash" ]]; then
+    should_flash=true
+  fi
+  
+  if [[ "$slack_has_special" == "true" ]] && [[ "$slack_special_action" == "flash" ]]; then
     should_flash=true
   fi
   
