@@ -1,0 +1,11 @@
+# Pushover configuration template
+# Copy this file to luxafor-pushover.conf and add your credentials
+
+# Get your tokens from https://pushover.net/
+PUSHOVER_APP_TOKEN="your_app_token_here"
+PUSHOVER_USER_KEY="your_user_key_here"
+
+# Enable/disable Pushover notifications
+PUSHOVER_ENABLED="false"  # Set to true to enable
+
+# You can also control Pushover from the SwiftBar menu

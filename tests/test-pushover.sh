@@ -3,8 +3,19 @@
 # Test Pushover integration
 #
 
-PUSHOVER_APP_TOKEN="***REMOVED***"
-PUSHOVER_USER_KEY="***REMOVED***"
+# Load from config file or use test values
+if [[ -f "../luxafor-pushover.conf" ]]; then
+    source ../luxafor-pushover.conf
+else
+    echo "Warning: luxafor-pushover.conf not found. Using template values."
+    PUSHOVER_APP_TOKEN="your_app_token_here"
+    PUSHOVER_USER_KEY="your_user_key_here"
+fi
+
+if [[ "$PUSHOVER_APP_TOKEN" == "your_app_token_here" ]]; then
+    echo "Error: Please configure your Pushover credentials in luxafor-pushover.conf"
+    exit 1
+fi
 
 echo "Testing Pushover notification..."
 

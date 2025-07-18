@@ -7,9 +7,29 @@ luxafor-cli/build/
 .luxafor-notify.pid
 luxafor-notify.log
 *.log
+*.pid
 
 # macOS
 .DS_Store
 
-# User-specific configs (optional - remove if you want to track config)
-# luxafor-config.conf
+# Backup files
+*.backup
+*.backup-*
+*~
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Test output
+test-output/
+*.test
+
+# User-specific configs with secrets
+luxafor-pushover.conf
+
+# Temporary files
+*.tmp
+*.temp
