@@ -33,3 +33,9 @@ luxafor-pushover.conf
 # Temporary files
 *.tmp
 *.temp
+
+# Development directories (not for distribution)
+tests/
+debug/
+examples/
+docs/
