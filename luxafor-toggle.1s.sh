@@ -225,6 +225,9 @@ if [ "$STATUS" = "running" ]; then
         name=$(echo "$name" | xargs)
         color=$(echo "$color" | xargs)
         
+        # Use the original Luxafor colors
+        swiftbar_color="$color"
+        
         # Check if enabled
         if grep -q "^${name}|disabled" "$SCRIPT_DIR/luxafor-enabled-apps.conf" 2>/dev/null; then
             checkbox="☐"
@@ -244,7 +247,7 @@ if [ "$STATUS" = "running" ]; then
         
         # Display with submenu if has channels
         if [[ "$has_channels" == "true" ]]; then
-            echo "$checkbox $name ▸ | color=$color"
+            echo "$checkbox $name ▸ | color=$swiftbar_color"
             
             # Special handling for Teams and Slack - show chats/DMs and channels separately
             if [[ "$name" == "Teams" ]] || [[ "$name" == "Slack" ]]; then
@@ -329,13 +332,13 @@ if [ "$STATUS" = "running" ]; then
                 done < "$SCRIPT_DIR/luxafor-channels.conf"
             fi
         else
-            echo "$checkbox $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='$action' terminal=false refresh=true color=$color"
+            echo "$checkbox $name | bash='$SCRIPT_DIR/toggle-app.sh' param1='$name' param2='$action' terminal=false refresh=true color=$swiftbar_color"
         fi
     done < "$CONFIG_FILE"
     
 else
     echo "Luxafor Monitor: Stopped | color=red"
-    echo "Start Monitoring | bash='launchctl' param1=load param2='$PLIST_PATH' terminal=false refresh=true"
+    echo "Start Monitoring | bash='$SCRIPT_DIR/luxafor-control.sh' param1='start' terminal=false refresh=true"
 fi
 
 echo "---"
