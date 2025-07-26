@@ -115,6 +115,9 @@ if [ "$STATUS" = "running" ]; then
         [[ "$name" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$name" ]] && continue
         
+        # Skip POLL_INTERVAL line
+        [[ "$name" =~ ^POLL_INTERVAL ]] && continue
+        
         # Trim whitespace
         name=$(echo "$name" | xargs)
         bundle=$(echo "$bundle" | xargs)
@@ -220,6 +223,9 @@ if [ "$STATUS" = "running" ]; then
         # Skip comments and empty lines
         [[ "$name" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$name" ]] && continue
+        
+        # Skip POLL_INTERVAL line
+        [[ "$name" =~ ^POLL_INTERVAL ]] && continue
         
         # Trim whitespace
         name=$(echo "$name" | xargs)
@@ -353,20 +359,89 @@ if [ -f "$SCRIPT_DIR/luxafor-pushover.conf" ]; then
     fi
 fi
 
+# Check if debug mode is enabled
+if [ -f "$SCRIPT_DIR/debug" ]; then
+    echo "☑ Debug Logging | bash='rm' param1='$SCRIPT_DIR/debug' terminal=false refresh=true color=green"
+    echo "--View Log | bash='tail' param1='-n' param2='50' param3='/tmp/luxafor-debug.log' terminal=true"
+else
+    echo "☐ Debug Logging | bash='touch' param1='$SCRIPT_DIR/debug' terminal=false refresh=true color=gray"
+fi
+
 echo "---"
-echo "Edit Config | bash='code' param1='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
-echo "Edit Channels/Folders | bash='code' param1='$SCRIPT_DIR/luxafor-channels.conf' terminal=false"
-echo "Edit Pushover Alerts | bash='code' param1='$SCRIPT_DIR/luxafor-pushover.conf' terminal=false"
-echo "Edit Burp Flash | bash='code' param1='$SCRIPT_DIR/luxafor-burp-flash.sh' terminal=false"
 echo "Restart Monitor | bash='$SCRIPT_DIR/luxafor-control.sh' param1='restart' terminal=true"
 echo "---"
-echo "Quick LED Test (6s) | bash='$SCRIPT_DIR/luxafor-quick-test.sh' terminal=false"
-echo "Full LED Test (30s) | bash='$SCRIPT_DIR/luxafor-test.sh' terminal=true"
+# Atmos Protection Control
+echo "Atmos Protection:"
+# Check if the launchd agent is loaded
+if launchctl list | grep -q "com.user.toggleprotection"; then
+    echo "☑ Auto-Toggle Active | bash='$HOME/scripts/atmos_protection/stop_protection_toggle.sh' terminal=false refresh=true color=orange"
+    echo "--Protection kept disabled | color=gray size=11"
+    echo "--Toggles every 50 minutes | color=gray size=11"
+    echo "-----"
+    echo "--Stop Auto-Toggle | bash='$HOME/scripts/atmos_protection/stop_protection_toggle.sh' terminal=false refresh=true"
+else
+    echo "☐ Auto-Toggle Inactive | bash='$HOME/scripts/atmos_protection/start_protection_toggle.sh' terminal=false refresh=true color=gray"
+    echo "--Click to keep protection off | color=gray size=11"
+    echo "-----"
+    echo "--Start Auto-Toggle | bash='$HOME/scripts/atmos_protection/start_protection_toggle.sh' terminal=false refresh=true"
+fi
+echo "--Disable Once Now | bash='/usr/bin/osascript' param1='$HOME/scripts/atmos_protection/disable_once.scpt' terminal=false"
+
+# SSH Tunnels
 echo "---"
-echo "Manual Colors: (⌥-click to keep menu open)"
-echo "  Red | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='red' terminal=false"
-echo "  Green | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='green' terminal=false"
-echo "  Blue | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='blue' terminal=false"
-echo "  Off | bash='$SCRIPT_DIR/../luxafor-cli/build/luxafor' param1='off' terminal=false"
+echo "SSH Tunnels:"
+
+# Read tunnel configuration
+if [ -f "$SCRIPT_DIR/tunnels.conf" ]; then
+    while IFS='|' read -r name local_port remote_spec ssh_host ssh_port description || [ -n "$name" ]; do
+        # Skip comments and empty lines
+        [[ "$name" =~ ^#.*$ ]] || [ -z "$name" ] && continue
+        
+        # Check if tunnel is active
+        tunnel_pid=$(ps aux | grep -E "ssh.*-L.*${local_port}:${remote_spec}.*${ssh_host}" | grep -v grep | awk '{print $2}')
+        
+        if [ -n "$tunnel_pid" ]; then
+            echo "--☑ $description ($local_port) | bash='$SCRIPT_DIR/tunnel-control.sh' param1='stop' param2='$name' terminal=false refresh=true color=green"
+            echo "----PID: $tunnel_pid | color=gray"
+            if [[ "$name" == "elasticsearch" ]]; then
+                echo "----Open Kibana | bash='open' param1='http://localhost:5601' terminal=false"
+            fi
+        else
+            echo "--☐ $description ($local_port) | bash='$SCRIPT_DIR/tunnel-control.sh' param1='start' param2='$name' terminal=false refresh=true"
+        fi
+    done < "$SCRIPT_DIR/tunnels.conf"
+else
+    echo "--No tunnels configured | color=gray"
+    echo "--Create tunnels.conf | bash='$EDITOR' param1='$SCRIPT_DIR/tunnels.conf' terminal=true"
+fi
+
+# SSH Connections
+echo "---"
+echo "SSH Connections:"
+
+# Read SSH connection configuration
+if [ -f "$SCRIPT_DIR/ssh-connections.conf" ]; then
+    while IFS='|' read -r name host port user description || [ -n "$name" ]; do
+        # Skip comments and empty lines
+        [[ "$name" =~ ^#.*$ ]] || [ -z "$name" ] && continue
+        
+        echo "--🖥  $description | bash='$SCRIPT_DIR/ssh-connect.sh' param1='$host' param2='$port' param3='$user' terminal=false"
+        echo "----$user@$host:$port | color=gray size=10"
+    done < "$SCRIPT_DIR/ssh-connections.conf"
+else
+    echo "--No SSH connections configured | color=gray"
+    echo "--Create ssh-connections.conf | bash='$EDITOR' param1='$SCRIPT_DIR/ssh-connections.conf' terminal=true"
+fi
+
+echo "---"
+echo "Edit Configurations:"
+echo "--Luxafor Config | bash='code' param1='$SCRIPT_DIR/luxafor-config.conf' terminal=false"
+echo "--Enabled Apps | bash='code' param1='$SCRIPT_DIR/luxafor-enabled-apps.conf' terminal=false"
+echo "--Channels/Folders | bash='code' param1='$SCRIPT_DIR/luxafor-channels.conf' terminal=false"
+echo "--Pushover Alerts | bash='code' param1='$SCRIPT_DIR/luxafor-pushover.conf' terminal=false"
+echo "--Burp Flash Script | bash='code' param1='$SCRIPT_DIR/luxafor-burp-flash.sh' terminal=false"
+echo "--SSH Tunnels | bash='code' param1='$SCRIPT_DIR/tunnels.conf' terminal=false"
+echo "--SSH Connections | bash='code' param1='$SCRIPT_DIR/ssh-connections.conf' terminal=false"
+
 echo "---"
 echo "Open Folder | bash='open' param1='$SCRIPT_DIR' terminal=false"
