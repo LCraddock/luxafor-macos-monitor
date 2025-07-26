@@ -10,6 +10,15 @@ CACHE_FILE="/tmp/luxafor-menu-cache"
 PID_FILE="/tmp/luxafor-menu-daemon.pid"
 LOG_FILE="/tmp/luxafor-menu-daemon.log"
 
+# Check if already running
+if [ -f "$PID_FILE" ]; then
+    OLD_PID=$(cat "$PID_FILE")
+    if ps -p "$OLD_PID" > /dev/null 2>&1; then
+        log "Daemon already running (PID: $OLD_PID), exiting"
+        exit 0
+    fi
+fi
+
 # Write PID
 echo $$ > "$PID_FILE"
 
