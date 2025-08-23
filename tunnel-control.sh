@@ -34,8 +34,14 @@ start_tunnel() {
     
     IFS='|' read -r local_port remote_spec ssh_host ssh_port description <<< "$config"
     
-    # Check if using SSH config (port is "config")
-    if [ "$ssh_port" = "config" ]; then
+    # Check tunnel type
+    if [ "$ssh_port" = "iap" ] && [ "$ssh_host" = "gcloud" ]; then
+        # Use gcloud IAP tunnel
+        # Parse remote_spec as instance:port
+        IFS=':' read -r instance remote_port <<< "$remote_spec"
+        echo "Running: gcloud compute start-iap-tunnel $instance $remote_port --local-host-port=localhost:$local_port --zone=us-east1-b --project=security-testing-237816" >> /tmp/tunnel-debug.log
+        gcloud compute start-iap-tunnel "$instance" "$remote_port" --local-host-port="localhost:$local_port" --zone=us-east1-b --project=security-testing-237816 2>> /tmp/tunnel-debug.log &
+    elif [ "$ssh_port" = "config" ]; then
         # Use SSH config alias
         echo "Running: ssh -f -N -L ${local_port}:${remote_spec} ${ssh_host}" >> /tmp/tunnel-debug.log
         ssh -f -N -L ${local_port}:${remote_spec} ${ssh_host} 2>> /tmp/tunnel-debug.log
@@ -66,7 +72,11 @@ stop_tunnel() {
     IFS='|' read -r local_port remote_spec ssh_host ssh_port description <<< "$config"
     
     # Find and kill the tunnel process
-    if [ "$ssh_port" = "config" ]; then
+    if [ "$ssh_port" = "iap" ] && [ "$ssh_host" = "gcloud" ]; then
+        # For gcloud IAP tunnels
+        IFS=':' read -r instance remote_port <<< "$remote_spec"
+        PID=$(ps aux | grep -E "gcloud.*start-iap-tunnel.*${instance}.*${remote_port}.*${local_port}" | grep -v grep | awk '{print $2}')
+    elif [ "$ssh_port" = "config" ]; then
         # For SSH config aliases, don't include port in search
         PID=$(ps aux | grep -E "ssh.*-L.*${local_port}:${remote_spec}.*${ssh_host}" | grep -v grep | awk '{print $2}')
     else

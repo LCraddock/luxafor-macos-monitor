@@ -48,6 +48,14 @@ start() {
     
     # Start menu daemon
     start_daemon
+    
+    # Start SwiftBar if not running
+    if ! pgrep -x "SwiftBar" > /dev/null; then
+        echo "Starting SwiftBar..."
+        open -a SwiftBar 2>/dev/null && echo "✓ SwiftBar started" || echo "⚠ SwiftBar not found - please start manually"
+    else
+        echo "✓ SwiftBar already running"
+    fi
 }
 
 start_daemon() {
@@ -158,6 +166,13 @@ status() {
         fi
     else
         echo "Menu daemon: Not running"
+    fi
+    
+    # Check SwiftBar
+    if pgrep -x "SwiftBar" > /dev/null; then
+        echo "SwiftBar: Running"
+    else
+        echo "SwiftBar: Not running (menu won't be visible)"
     fi
 }
 
