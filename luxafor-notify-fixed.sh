@@ -44,6 +44,18 @@ load_config() {
         [[ "$name" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$name" ]] && continue
         
+        # Check for POLL_INTERVAL setting (POLL_INTERVAL=5 format)
+        if [[ "$name" =~ ^POLL_INTERVAL=([0-9]+)$ ]]; then
+            POLL_INTERVAL=${BASH_REMATCH[1]}
+            # Enforce min/max limits
+            if [[ $POLL_INTERVAL -lt 1 ]]; then
+                POLL_INTERVAL=1
+            elif [[ $POLL_INTERVAL -gt 60 ]]; then
+                POLL_INTERVAL=60
+            fi
+            continue
+        fi
+        
         # Trim whitespace
         name=$(echo "$name" | xargs)
         bundle=$(echo "$bundle" | xargs)
@@ -218,7 +230,7 @@ is_teams_configured_channel() {
     return 1  # Not found
 }
 
-# Get current Slack channel/DM name and type
+# Get current Slack channel/DM name and type, plus workspace information
 get_slack_current_channel() {
     local window_title=$(osascript -e 'tell application "System Events" to tell process "Slack" to name of front window' 2>/dev/null)
     
@@ -245,54 +257,67 @@ get_slack_current_channel() {
     fi
 }
 
-# Get workspace badges from Slack sidebar
-# Returns comma-separated list of workspace names with badges
-get_slack_workspace_badges() {
-    local workspaces=$(osascript <<'APPLESCRIPT' 2>/dev/null
+# Check for workspace notifications in Slack sidebar
+# Returns: "workspace_name" if found, empty if none
+get_slack_workspace_with_badge() {
+    local workspace_name=$(osascript <<'APPLESCRIPT' 2>/dev/null
 tell application "System Events"
     tell process "Slack"
         try
-            set workspaceList to {}
+            -- Look for workspace switcher area (usually in left sidebar)
+            -- Check for elements with badges or notification indicators
             
-            -- Check the workspace switcher (usually on the left side)
-            -- Look for groups that contain workspace buttons
-            repeat with grp in groups of window 1
+            -- Method 1: Look for workspace buttons with badges in the sidebar
+            set workspaceElements to UI elements of group 1 of window 1
+            
+            repeat with workspaceElement in workspaceElements
                 try
-                    -- Look for buttons in this group
-                    repeat with btn in buttons of grp
-                        try
-                            set btnName to name of btn
-                            set btnDesc to description of btn
-                            
-                            -- Check if this button has a badge indicator
-                            -- Slack shows badges as part of the button name or description
-                            if btnDesc contains "unread" or btnDesc contains "mention" or btnName contains "(" then
-                                -- Extract workspace name
-                                if btnName contains "(" then
-                                    -- Format: "Workspace Name (1)"
-                                    set wsName to text 1 thru ((offset of "(" in btnName) - 2) of btnName
-                                    set end of workspaceList to wsName
-                                else if btnDesc contains "workspace" then
-                                    -- Use button name as workspace name
-                                    set end of workspaceList to btnName
-                                end if
-                            end if
-                        on error
-                            -- Skip inaccessible buttons
-                        end try
-                    end repeat
+                    -- Check if this element has a badge or notification indicator
+                    set elementDescription to description of workspaceElement as string
+                    set elementValue to value of workspaceElement as string
+                    
+                    -- Look for workspace names with badges
+                    -- Slack workspaces often have format "Workspace Name (1)" or similar
+                    if elementDescription contains "button" and (elementValue contains "(" or elementDescription contains "notification" or elementDescription contains "badge") then
+                        -- Extract workspace name before any badge indicators
+                        if elementValue contains "(" then
+                            set workspaceName to text 1 thru ((offset of "(" in elementValue) - 2) of elementValue
+                            return workspaceName
+                        else if elementValue is not "" then
+                            return elementValue
+                        end if
+                    end if
                 on error
-                    -- Skip inaccessible groups
+                    -- Skip elements that can't be accessed
                 end try
             end repeat
             
-            -- Join list with commas
-            set AppleScript's text item delimiters to ","
-            set resultText to workspaceList as string
-            set AppleScript's text item delimiters to ""
+            -- Method 2: Look specifically in sidebar for workspace list
+            try
+                set sidebarElements to UI elements of scroll area 1 of group 1 of window 1
+                repeat with sidebarElement in sidebarElements
+                    try
+                        set elementRole to role of sidebarElement as string
+                        set elementValue to value of sidebarElement as string
+                        
+                        -- Look for workspace indicators with badges
+                        if elementRole is "AXButton" and elementValue contains "workspace" and (elementValue contains "(" or elementValue contains "•") then
+                            if elementValue contains "(" then
+                                set workspaceName to text 1 thru ((offset of "(" in elementValue) - 2) of elementValue
+                                return workspaceName
+                            end if
+                        end if
+                    on error
+                        -- Continue to next element
+                    end try
+                end repeat
+            on error
+                -- Sidebar method failed, continue
+            end try
             
-            return resultText
-        on error
+            return ""
+            
+        on error errMsg
             return ""
         end try
     end tell
@@ -300,7 +325,7 @@ end tell
 APPLESCRIPT
 )
     
-    echo "$workspaces"
+    echo "$workspace_name"
 }
 
 # Check if Slack name is a configured channel
@@ -325,9 +350,6 @@ load_channel_config
 
 # Track previous LED state
 previous_color="off"
-
-# Track previous Slack workspace badges
-previous_slack_badges=""
 
 # Check if app is enabled
 is_app_enabled() {
@@ -401,6 +423,7 @@ while true; do
   outlook_special_folder=""
   outlook_pushover_priority="0"
   outlook_pushover_sound="pushover"
+  winning_app=""
   
   for i in "${!APP_NAMES[@]}"; do
     app_name="${APP_NAMES[$i]}"
@@ -408,8 +431,11 @@ while true; do
     color="${COLORS[$i]}"
     priority="${PRIORITIES[$i]}"
     
-    # Get badge count
-    badge_count=$(get_badge_lsappinfo "$bundle_id")
+    # Get badge count - THIS IS THE ORIGINAL BADGE COUNT FROM DOCK
+    original_badge_count=$(get_badge_lsappinfo "$bundle_id")
+    badge_count=$original_badge_count
+    
+    debug_log "Processing $app_name: original_badge_count=$original_badge_count"
     
     # Special handling for Outlook - ONLY check configured folders
     if [[ "$app_name" == "Outlook" ]]; then
@@ -442,29 +468,6 @@ while true; do
             fi
           fi
         done
-        
-        # Fall back to old config if not found in channels (DISABLED - using channels now)
-        if false && [[ "$found_in_channels" == "false" ]] && [ -f "$OUTLOOK_FOLDERS_CONFIG" ]; then
-          while IFS='|' read -r folder folder_color action || [ -n "$folder" ]; do
-            # Skip comments and empty lines
-            [[ "$folder" =~ ^[[:space:]]*# ]] && continue
-            [[ -z "$folder" ]] && continue
-            
-            # Trim whitespace
-            folder=$(echo "$folder" | xargs)
-            folder_color=$(echo "$folder_color" | xargs)
-            action=$(echo "$action" | xargs)
-            
-            # Check if this folder has unread emails
-            folder_count=$(check_outlook_special_folder "$folder")
-            if [[ "$folder_count" -gt 0 ]]; then
-              outlook_has_special=true
-              special_folder_color="$folder_color"
-              special_folder_action="$action"
-              break  # Use first matching special folder
-            fi
-          done < "$OUTLOOK_FOLDERS_CONFIG"
-        fi
       fi
     fi
     
@@ -548,141 +551,149 @@ while true; do
       slack_pushover_priority="0"
       slack_pushover_sound="pushover"
       
-      # Get current Slack channel/DM name and type
-      if [[ "$badge_count" -gt 0 ]] && is_app_enabled "$app_name"; then
-        # First, check for workspace badges
-        current_slack_badges=$(get_slack_workspace_badges)
-        debug_log "Current workspace badges: $current_slack_badges"
-        debug_log "Previous workspace badges: $previous_slack_badges"
+      # ONLY process if we have a badge AND the app is enabled
+      if [[ "$original_badge_count" -gt 0 ]] && is_app_enabled "$app_name"; then
+        debug_log "Slack has badge ($original_badge_count) and is enabled, processing..."
         
-        # Check if there are NEW workspace badges
-        new_workspace=""
-        if [[ -n "$current_slack_badges" ]]; then
-          # Split current and previous badges into arrays
-          IFS=',' read -ra CURRENT_BADGES <<< "$current_slack_badges"
-          IFS=',' read -ra PREVIOUS_BADGES <<< "$previous_slack_badges"
-          
-          # Find new badges
-          for badge in "${CURRENT_BADGES[@]}"; do
-            is_new=true
-            for prev_badge in "${PREVIOUS_BADGES[@]}"; do
-              if [[ "$badge" == "$prev_badge" ]]; then
-                is_new=false
-                break
-              fi
-            done
-            if [[ "$is_new" == "true" ]]; then
-              new_workspace="$badge"
-              debug_log "Found NEW workspace badge: $new_workspace"
-              break
-            fi
-          done
-        fi
+        # Try to get current Slack channel/DM name and type
+        slack_current_info=$(get_slack_current_channel)
         
-        # If we found a NEW workspace badge, use that
-        if [[ -n "$new_workspace" ]]; then
-          slack_current_name="$new_workspace (Workspace)"
-          slack_current_type="Workspace"
+        if [[ -n "$slack_current_info" ]]; then
+          # SUCCESS: We detected the active channel
+          debug_log "Active channel detected: $slack_current_info"
           
-          # Use _all_dms settings for workspace notifications
-          for i in "${!CHANNEL_APPS[@]}"; do
-            if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
-               [[ "${CHANNEL_TYPES[$i]}" == "dm" ]] && \
-               [[ "${CHANNEL_NAMES[$i]}" == "_all_dms" ]] && \
-               [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
-              
-              slack_has_special=true
-              slack_special_color="${CHANNEL_COLORS[$i]}"
-              slack_special_action="${CHANNEL_ACTIONS[$i]}"
-              slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
-              slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
-              debug_log "Using workspace notification settings for: $new_workspace"
-              break
-            fi
-          done
+          # Split the result (name|type)
+          IFS='|' read -r slack_current_name slack_current_type <<< "$slack_current_info"
           
-          if [[ "$slack_has_special" == "false" ]]; then
-            badge_count=0
-            debug_log "Workspace notifications disabled"
-          fi
-        else
-          # No new workspace badges - check current window
-          slack_current_info=$(get_slack_current_channel)
-          
-          if [[ -n "$slack_current_info" ]]; then
-            # Split the result (name|type)
-            IFS='|' read -r slack_current_name slack_current_type <<< "$slack_current_info"
-            
-            if [[ "$slack_current_type" == "Channel" ]]; then
-              # This is a channel - check if it's configured and enabled
-              if is_slack_configured_channel "$slack_current_name"; then
-                # Check if it's enabled
-                for i in "${!CHANNEL_APPS[@]}"; do
-                  if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
-                     [[ "${CHANNEL_TYPES[$i]}" == "channel" ]] && \
-                     [[ "${CHANNEL_NAMES[$i]}" == "$slack_current_name" ]] && \
-                     [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
-                    
-                    # Channel is enabled - use its settings
-                    slack_has_special=true
-                    slack_special_color="${CHANNEL_COLORS[$i]}"
-                    slack_special_action="${CHANNEL_ACTIONS[$i]}"
-                    slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
-                    slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
-                    debug_log "Found Slack channel notification: $slack_current_name"
-                    break
-                  fi
-                done
-                
-                # If channel is not enabled, don't alert
-                if [[ "$slack_has_special" == "false" ]]; then
-                  badge_count=0
-                  debug_log "Slack channel disabled: $slack_current_name"
-                fi
-              else
-                # Channel not configured - don't alert
-                badge_count=0
-                debug_log "Slack channel not configured: $slack_current_name"
-              fi
-            else
-              # This is a DM - check if all DMs are enabled
+          if [[ "$slack_current_type" == "Channel" ]]; then
+            # This is a channel - check if it's configured and enabled
+            if is_slack_configured_channel "$slack_current_name"; then
+              # Check if it's enabled
               for i in "${!CHANNEL_APPS[@]}"; do
                 if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
-                   [[ "${CHANNEL_TYPES[$i]}" == "dm" ]] && \
-                   [[ "${CHANNEL_NAMES[$i]}" == "_all_dms" ]] && \
+                   [[ "${CHANNEL_TYPES[$i]}" == "channel" ]] && \
+                   [[ "${CHANNEL_NAMES[$i]}" == "$slack_current_name" ]] && \
                    [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
                   
-                  # All DMs are enabled - use DM settings
+                  # Channel is enabled - use its settings
                   slack_has_special=true
                   slack_special_color="${CHANNEL_COLORS[$i]}"
                   slack_special_action="${CHANNEL_ACTIONS[$i]}"
                   slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
                   slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
-                  debug_log "Found Slack DM notification: $slack_current_name"
+                  debug_log "Found Slack channel notification: $slack_current_name"
                   break
                 fi
               done
               
-              # If all DMs are disabled, don't alert
+              # If channel is not enabled, don't alert
               if [[ "$slack_has_special" == "false" ]]; then
                 badge_count=0
-                debug_log "Slack DMs disabled: $slack_current_name"
+                debug_log "Slack channel disabled: $slack_current_name"
               fi
+            else
+              # Channel not configured - don't alert
+              badge_count=0
+              debug_log "Slack channel not configured: $slack_current_name"
             fi
           else
-            # No current channel info and no new workspace badges
-            # Could be old workspace badges still present - don't alert
-            if [[ -n "$current_slack_badges" ]]; then
-              debug_log "Old workspace badges still present, not alerting"
-            else
-              debug_log "No Slack channel or workspace info available"
+            # This is a DM - check if all DMs are enabled
+            for i in "${!CHANNEL_APPS[@]}"; do
+              if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
+                 [[ "${CHANNEL_TYPES[$i]}" == "dm" ]] && \
+                 [[ "${CHANNEL_NAMES[$i]}" == "_all_dms" ]] && \
+                 [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
+                
+                # All DMs are enabled - use DM settings
+                slack_has_special=true
+                slack_special_color="${CHANNEL_COLORS[$i]}"
+                slack_special_action="${CHANNEL_ACTIONS[$i]}"
+                slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
+                slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
+                debug_log "Found Slack DM notification: $slack_current_name"
+                break
+              fi
+            done
+            
+            # If all DMs are disabled, don't alert
+            if [[ "$slack_has_special" == "false" ]]; then
+              badge_count=0
+              debug_log "Slack DMs disabled: $slack_current_name"
             fi
-            badge_count=0
+          fi
+        else
+          # FAILURE: Window title detection failed - this is a multi-workspace notification
+          debug_log "Slack window title detection failed, checking workspace sidebar for badges"
+          
+          local workspace_with_badge=$(get_slack_workspace_with_badge)
+          
+          if [[ -n "$workspace_with_badge" ]]; then
+            # SUCCESS: Found a workspace with badge 
+            debug_log "Found workspace with badge: $workspace_with_badge"
+            
+            # Use the _all_dms settings for generic workspace notifications
+            for i in "${!CHANNEL_APPS[@]}"; do
+              if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
+                 [[ "${CHANNEL_TYPES[$i]}" == "dm" ]] && \
+                 [[ "${CHANNEL_NAMES[$i]}" == "_all_dms" ]] && \
+                 [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
+                
+                slack_has_special=true
+                slack_special_color="${CHANNEL_COLORS[$i]}"
+                slack_special_action="${CHANNEL_ACTIONS[$i]}"
+                slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
+                slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
+                # Set a special marker for workspace name
+                slack_current_name="$workspace_with_badge"
+                slack_current_type="Workspace"
+                debug_log "Using _all_dms settings for workspace notification: $workspace_with_badge"
+                break
+              fi
+            done
+            
+            # If _all_dms is disabled, check if we should fall back to basic app notification
+            if [[ "$slack_has_special" == "false" ]]; then
+              debug_log "_all_dms disabled - falling back to basic Slack notification"
+              # DON'T set badge_count=0 here - let it use the basic app settings
+              # badge_count remains the original badge count
+            fi
+          else
+            # FAILURE: No workspace badge found - but we still have a dock badge!
+            debug_log "No workspace badge detected, but dock badge exists - using fallback"
+            
+            # CRITICAL FIX: Don't disable the notification!
+            # We have a dock badge but can't identify the source
+            # Fall back to _all_dms if enabled, otherwise use basic app settings
+            
+            for i in "${!CHANNEL_APPS[@]}"; do
+              if [[ "${CHANNEL_APPS[$i]}" == "Slack" ]] && \
+                 [[ "${CHANNEL_TYPES[$i]}" == "dm" ]] && \
+                 [[ "${CHANNEL_NAMES[$i]}" == "_all_dms" ]] && \
+                 [[ "${CHANNEL_ENABLED[$i]}" == "true" ]]; then
+                
+                slack_has_special=true
+                slack_special_color="${CHANNEL_COLORS[$i]}"
+                slack_special_action="${CHANNEL_ACTIONS[$i]}"
+                slack_pushover_priority="${CHANNEL_PRIORITIES[$i]}"
+                slack_pushover_sound="${CHANNEL_SOUNDS[$i]}"
+                slack_current_name="Unknown"
+                slack_current_type="Unknown"
+                debug_log "Using _all_dms settings for unidentified Slack notification"
+                break
+              fi
+            done
+            
+            # If _all_dms is disabled, still allow the basic app notification
+            if [[ "$slack_has_special" == "false" ]]; then
+              debug_log "All channel detection failed, falling back to basic app notification"
+              # badge_count remains the original badge count - basic app notification will work
+            fi
           fi
         fi
-        
-        # Update previous badges for next iteration
-        previous_slack_badges="$current_slack_badges"
+      else
+        # No badge or app disabled
+        debug_log "Slack: no badge ($original_badge_count) or app disabled"
+        badge_count=0
       fi
     fi
     
@@ -690,6 +701,9 @@ while true; do
     if is_app_enabled "$app_name" && [[ "$badge_count" -gt 0 ]] && [[ "$priority" -lt "$highest_priority" ]]; then
         highest_priority=$priority
         selected_color=$color
+        winning_app=$app_name
+        
+        debug_log "$app_name wins priority with badge_count=$badge_count, priority=$priority"
         
         # If this is Outlook with special folder, override color/action
         if [[ "$app_name" == "Outlook" ]] && [[ "$outlook_has_special" == "true" ]]; then
@@ -709,18 +723,9 @@ while true; do
   done
   
   # Send Pushover only when LED transitions from off to on
-  debug_log "LED state: previous=$previous_color, current=$selected_color"
+  debug_log "LED state: previous=$previous_color, current=$selected_color, winning_app=$winning_app"
   
   if [[ "$selected_color" != "off" ]] && [[ "$previous_color" == "off" ]] && [[ "$highest_priority" -lt 999 ]]; then
-    # Find which app won the priority
-    winning_app=""
-    for i in "${!APP_NAMES[@]}"; do
-      if [[ "${PRIORITIES[$i]}" -eq "$highest_priority" ]]; then
-        winning_app="${APP_NAMES[$i]}"
-        break
-      fi
-    done
-    
     # Send simple Pushover notification
     if [[ -n "$winning_app" ]]; then
       debug_log "Sending Pushover for $winning_app (transition from off to $selected_color)"
@@ -748,7 +753,16 @@ while true; do
         push_priority="$slack_pushover_priority"
         push_sound="$slack_pushover_sound"
         if [[ -n "$slack_current_name" ]]; then
-          push_message="$winning_app: $slack_current_name"
+          if [[ "$slack_current_type" == "Workspace" ]]; then
+            # Multi-workspace notification
+            push_message="$winning_app: $slack_current_name workspace"
+          elif [[ "$slack_current_type" == "Unknown" ]]; then
+            # Unknown source notification
+            push_message="$winning_app: notification from inactive workspace"
+          else
+            # Regular channel/DM notification
+            push_message="$winning_app: $slack_current_name"
+          fi
         fi
       fi
       
