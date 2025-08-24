@@ -5,9 +5,10 @@
 #
 
 # Debug mode - set to true to enable logging
+DEBUG_MODE="${DEBUG_MODE:-false}"
+
 debug_log() {
-    # Check if debug file exists in script directory
-    if [[ -f "/Users/larry.craddock/Projects/luxafor/debug" ]]; then
+    if [[ "$DEBUG_MODE" == "true" ]]; then
         echo "[$(date '+%H:%M:%S')] $1" >> /tmp/luxafor-debug.log
     fi
 }
@@ -43,18 +44,6 @@ load_config() {
         # Skip comments and empty lines
         [[ "$name" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$name" ]] && continue
-        
-        # Check for POLL_INTERVAL setting (POLL_INTERVAL=5 format)
-        if [[ "$name" =~ ^POLL_INTERVAL=([0-9]+)$ ]]; then
-            POLL_INTERVAL=${BASH_REMATCH[1]}
-            # Enforce min/max limits
-            if [[ $POLL_INTERVAL -lt 1 ]]; then
-                POLL_INTERVAL=1
-            elif [[ $POLL_INTERVAL -gt 60 ]]; then
-                POLL_INTERVAL=60
-            fi
-            continue
-        fi
         
         # Trim whitespace
         name=$(echo "$name" | xargs)
