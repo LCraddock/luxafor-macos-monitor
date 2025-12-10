@@ -119,6 +119,17 @@ start_tunnel() {
 
         # Run the launcher script in background
         nohup "$script_path" >> /tmp/tunnel-debug.log 2>&1 &
+    elif [ "$ssh_port" = "reverse-config" ]; then
+        # Use SSH config alias with reverse tunnel
+        echo "Running: ssh -f -N -R ${local_port}:${remote_spec} ${ssh_host}" >> /tmp/tunnel-debug.log
+        ssh -f -N -R ${local_port}:${remote_spec} ${ssh_host} 2>> /tmp/tunnel-debug.log
+    elif [ "$ssh_port" = "reverse" ]; then
+        # Use reverse tunnel with explicit host/port
+        # For reverse tunnels: ssh -R remote_port:destination:dest_port user@ssh_server
+        # Here: ssh_host contains user@server, remote_spec contains destination:port
+        # local_port is the port to open on the remote server
+        echo "Running: ssh -f -N -R ${local_port}:${remote_spec} ${ssh_host}" >> /tmp/tunnel-debug.log
+        ssh -f -N -R ${local_port}:${remote_spec} ${ssh_host} 2>> /tmp/tunnel-debug.log
     elif [ "$ssh_port" = "config" ]; then
         # Use SSH config alias
         echo "Running: ssh -f -N -L ${local_port}:${remote_spec} ${ssh_host}" >> /tmp/tunnel-debug.log
@@ -192,6 +203,12 @@ stop_tunnel() {
         # For Python web servers - find the python process
         # The launcher script starts python, so look for the .py file
         PID=$(ps aux | grep -E "python.*claude_session_browser\.py" | grep -v grep | awk '{print $2}')
+    elif [ "$ssh_port" = "reverse-config" ]; then
+        # For SSH config aliases with reverse tunnel, search for -R flag
+        PID=$(ps aux | grep -E "ssh.*-R.*${local_port}:${remote_spec}.*${ssh_host}" | grep -v grep | awk '{print $2}')
+    elif [ "$ssh_port" = "reverse" ]; then
+        # For reverse tunnels, search for -R flag
+        PID=$(ps aux | grep -E "ssh.*-R.*${local_port}:${remote_spec}.*${ssh_host}" | grep -v grep | awk '{print $2}')
     elif [ "$ssh_port" = "config" ]; then
         # For SSH config aliases, don't include port in search
         PID=$(ps aux | grep -E "ssh.*-L.*${local_port}:${remote_spec}.*${ssh_host}" | grep -v grep | awk '{print $2}')
